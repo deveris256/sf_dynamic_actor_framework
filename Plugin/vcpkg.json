@@ -2,7 +2,7 @@
     "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
     "name": "sf-dynamic-actor-framework",
     "version-string": "1.0.0",
-    "description": "sfse plugin for starfield",
+    "description": "Dynamic Actor Framework (DAF)",
     "homepage": "https://github.com/deveris256/sf_dynamic_actor_framework",
     "dependencies": [
         "spdlog",

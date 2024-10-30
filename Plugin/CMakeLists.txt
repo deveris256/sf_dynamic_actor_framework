@@ -38,8 +38,7 @@ source_group(
 
 # dependencies
 find_package(spdlog CONFIG REQUIRED)
-find_dependency_path(DKUtil include/DKUtil/Logger.hpp)
-find_dependency_path(CommonLibSF CommonLibSF/include/SFSE/SFSE.h)
+find_dependency_path(CommonLibSF include/SFSE/SFSE.h)
 
 # cmake target
 # runtime
@@ -66,7 +65,6 @@ target_include_directories(
 target_link_libraries(
 	${PROJECT_NAME} 
 	PRIVATE
-		DKUtil::DKUtil
 		CommonLibSF::CommonLibSF
 		spdlog::spdlog
 )

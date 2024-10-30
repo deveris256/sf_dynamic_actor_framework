@@ -115,10 +115,6 @@ using namespace REL::literals;
 // Plugin
 #include "Plugin.h"
 
-// DKUtil
-#include "DKUtil/Hook.hpp"
-#include "DKUtil/Logger.hpp"
-
 // SFSEPlugin_Version
 DLLEXPORT constinit auto SFSEPlugin_Version = []() noexcept {
 	SFSE::PluginVersionData data{};
