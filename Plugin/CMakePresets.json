@@ -10,6 +10,8 @@
 			"name": "common",
 			"hidden": true,
 			"cacheVariables": {
+				"BUILD_SHARED_LIBS": "OFF",
+				"USING_VCPKG": "ON",
 				"CMAKE_CXX_FLAGS": "$env{PROJECT_PLATFORM_FLAGS} $env{PROJECT_TEXT_FLAGS} $env{PROJECT_COMPILER_FLAGS} $penv{CXXFLAGS}",
 				"SFSE_SUPPORT_XBYAK": "ON"
 			},

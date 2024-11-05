@@ -38,6 +38,7 @@ source_group(
 
 # dependencies
 find_package(spdlog CONFIG REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
 find_dependency_path(CommonLibSF include/SFSE/SFSE.h)
 
 # cmake target
@@ -67,6 +68,7 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSF::CommonLibSF
 		spdlog::spdlog
+		yaml-cpp::yaml-cpp
 )
 
 # compiler def

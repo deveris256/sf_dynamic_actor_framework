@@ -4,11 +4,12 @@
     "version-string": "1.0.0",
     "description": "Dynamic Actor Framework (DAF)",
     "homepage": "https://github.com/deveris256/sf_dynamic_actor_framework",
-    "dependencies": [
-        "spdlog",
-        "nlohmann-json",
-        "simpleini",
-        "tomlplusplus",
-        "xbyak"
-    ]
+  "dependencies": [
+    "nlohmann-json",
+    "simpleini",
+    "yaml-cpp",
+    "tomlplusplus",
+    "xbyak",
+    "spdlog"
+  ]
 }

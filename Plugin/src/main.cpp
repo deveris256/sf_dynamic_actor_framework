@@ -3,6 +3,8 @@
  * This plugin template links against CommonLibSF
  */
 
+#include "Papyrus.h"
+
 namespace
 {
 	void MessageCallback(SFSE::MessagingInterface::Message* a_msg) noexcept
@@ -16,28 +18,19 @@ namespace
 			break;
 		}
 	}
-}
 
-/**
-// for preload plugins
-void SFSEPlugin_Preload(SFSE::LoadInterface* a_sfse);
-/**/
+	void BindPapyrusFunctions(RE::BSScript::IVirtualMachine** a_vm)
+	{
+		(*a_vm)->BindNativeMethod("DAF", "ChangeScaleValue", &DAFPapyrus::ChangeScaleValue, true, false);
+	}
+}
 
 DLLEXPORT bool SFSEAPI SFSEPlugin_Load(const SFSE::LoadInterface* a_sfse)
 {
-#ifndef NDEBUG
-	MessageBoxA(NULL, "Loaded. You can now attach the debugger or continue execution.", Plugin::NAME.data(), NULL);
-#endif
-
 	SFSE::Init(a_sfse, false);
-	INFO("{} v{} loaded", Plugin::NAME, Plugin::Version);
-
-	// do stuff
-	// this allocates 1024 bytes for development builds, you can
-	// adjust the value accordingly with the log result for release builds
-	//SFSE::AllocTrampoline(1 << 10);
 
 	SFSE::GetMessagingInterface()->RegisterListener(MessageCallback);
+	SFSE::SetPapyrusCallback(&BindPapyrusFunctions);
 
 	return true;
 }
