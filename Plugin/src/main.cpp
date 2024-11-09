@@ -4,14 +4,35 @@
  */
 
 #include "Papyrus.h"
+#include "LogWrapper.h"
+#include "HookManager.h"
+#include "SFEventHandler.h"
+#include "MorphEvaluationRuleSet.h"
+#include "ConditionalMorphManager.h"
 
 namespace
 {
 	void MessageCallback(SFSE::MessagingInterface::Message* a_msg) noexcept
 	{
+		events::GameDataLoadedEventDispatcher::GetSingleton()->Dispatch({ SFSE::MessagingInterface::MessageType(a_msg->type) });
+
 		switch (a_msg->type) {
+		case SFSE::MessagingInterface::kPostDataLoad:
+			{
+				logger::info("Initializing core components.", utils::GetPluginName());
+
+				daf::MorphRuleSetManager::GetSingleton().LoadRulesets(utils::GetPluginFolder() + "\\Rulesets");
+
+				daf::ConditionalMorphManager::GetSingleton().Register();
+			}
+			break;
 		case SFSE::MessagingInterface::kPostLoad:
 			{
+				logger::info("{} loaded.", utils::GetPluginName());
+
+				events::RegisterHandlers();
+
+				hooks::InstallHooks();
 			}
 			break;
 		default:

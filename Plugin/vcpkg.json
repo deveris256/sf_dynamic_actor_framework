@@ -10,6 +10,8 @@
     "yaml-cpp",
     "tomlplusplus",
     "xbyak",
-    "spdlog"
+    "spdlog",
+    "detours",
+    "tbb"
   ]
 }

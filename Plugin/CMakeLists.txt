@@ -37,7 +37,11 @@ source_group(
 )
 
 # dependencies
+find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
+find_library(DETOURS_LIBRARY detours REQUIRED)
+
 find_package(spdlog CONFIG REQUIRED)
+find_package(TBB CONFIG REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
 find_dependency_path(CommonLibSF include/SFSE/SFSE.h)
 
@@ -69,6 +73,7 @@ target_link_libraries(
 		CommonLibSF::CommonLibSF
 		spdlog::spdlog
 		yaml-cpp::yaml-cpp
+		TBB::tbb
 )
 
 # compiler def
@@ -105,6 +110,7 @@ if (MSVC)
 			/Zc:wchar_t
 			/wd4200 # nonstandard extension used : zero-sized array in struct/union
 			/FI${CMAKE_CURRENT_SOURCE_DIR}/src/PCH.h
+			/Yu${CMAKE_CURRENT_SOURCE_DIR}/src/PCH.h
 	)
 endif()
 

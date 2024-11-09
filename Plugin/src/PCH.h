@@ -106,6 +106,18 @@
 // winnt
 #include <ShlObj_core.h>
 
+// TBB
+#include <tbb/tbb.h>
+
+// ExprTK
+#include "exprtk.hpp"
+
+// Detours
+#include "detours/detours.h"
+
+// json
+#include "nlohmann/json.hpp"
+
 #undef min
 #undef max
 
