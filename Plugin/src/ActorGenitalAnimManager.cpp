@@ -11,7 +11,7 @@ void daf::ActorGenitalAnimManager::OnEvent(const events::ActorUpdateEvent& a_eve
 		return;
 	}
 	auto& generator = accessor->second;
-	generator->update(when);
+	generator->updateWithSystemTime(when, GenitalAnimGeneratorMaxDeltaTime);
 
 	_ActorValue_Evaluated_List_T::accessor actorValueEvaluatedAccessor;
 	if (!m_actorValueEvaluatedList.find(actorValueEvaluatedAccessor, actor->formID)) {
@@ -176,11 +176,19 @@ daf::ActorGenitalAnimManager::GenitalAnimData daf::ActorGenitalAnimManager::Load
 		auto& physicsData = animDataPresetsData["physicsData"];
 		animData.physicsData.enabled = physicsData["enabled"].get<bool>();
 		animData.physicsData.mass = physicsData["mass"].get<float>();
+		if (animData.physicsData.mass < 0.01f) {
+			animData.physicsData.mass = 0.01f;
+			logger::warn("ActorGenitalAnimManager: Mass value too low. Set to 0.01");
+		}
 		if (physicsData.contains("stiffness")) {
 			auto& entry = physicsData["stiffness"];
 			// If the entry is float
 			if (entry.is_number()) {
 				animData.physicsData.stiffness = entry.get<float>();
+				if (animData.physicsData.stiffness < 0.1f) {
+					animData.physicsData.stiffness = 0.1f;
+					logger::warn("ActorGenitalAnimManager: Stiffness value too low. Set to 0.1");
+				}
 			} else if (entry.is_string()) {
 				animData.physicsData.stiffnessExpression = entry.get<std::string>();
 			}
@@ -190,6 +198,10 @@ daf::ActorGenitalAnimManager::GenitalAnimData daf::ActorGenitalAnimManager::Load
 			// If the entry is float
 			if (entry.is_number()) {
 				animData.physicsData.angularDamping = entry.get<float>();
+				if (animData.physicsData.angularDamping < 0.1f) {
+					animData.physicsData.angularDamping = 0.1f;
+					logger::warn("ActorGenitalAnimManager: AngularDamping value too low. Set to 0.1");
+				}
 			} else if (entry.is_string()) {
 				animData.physicsData.angularDampingExpression = entry.get<std::string>();
 			}
@@ -199,6 +211,10 @@ daf::ActorGenitalAnimManager::GenitalAnimData daf::ActorGenitalAnimManager::Load
 			// If the entry is float
 			if (entry.is_number()) {
 				animData.physicsData.linearDrag = entry.get<float>();
+				if (animData.physicsData.linearDrag < 0.f) {
+					animData.physicsData.linearDrag = 0.f;
+					logger::warn("ActorGenitalAnimManager: LinearDrag value too low. Set to 0");
+				}
 			} else if (entry.is_string()) {
 				animData.physicsData.linearDragExpression = entry.get<std::string>();
 			}

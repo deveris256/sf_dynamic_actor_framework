@@ -5,6 +5,7 @@
 
 namespace daf
 {
+	inline constexpr time_t           GenitalAnimGeneratorMaxDeltaTime{ 200 };
 	inline constexpr time_t           ArousalActorValueEvaluationCooldown{ 500 };
 	inline constexpr std::string_view ArousalActorValueEditorID{ "DAFGen_ArousalLevel" };
 

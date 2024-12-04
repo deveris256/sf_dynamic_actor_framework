@@ -183,18 +183,21 @@ namespace daf
 
 		void setStiffness(double stiffness)
 		{
+			stiffness = std::max(0.1, stiffness);
 			physics_stiffness = stiffness;
 			chain.setStiffness(stiffness);
 		}
 
 		void setAngularDamping(double angularDamping)
 		{
+			angularDamping = std::max(0.1, angularDamping);
 			physics_angularDamping = angularDamping;
 			chain.setAngularDamping(angularDamping);
 		}
 
 		void setLinearDrag(double linearDrag)
 		{
+			linearDrag = std::max(0.0, linearDrag);
 			physics_linearDrag = linearDrag;
 			chain.setLinearDrag(linearDrag);
 		}
@@ -339,10 +342,10 @@ namespace daf
 		};
 
 		NodeChainLerpGenerator() :
-			lastTime(0), eta(0), fadeNode(nullptr) {}
+			lastLocalTime(0), etaLocal(0), lastSystemTime(0), fadeNode(nullptr) {}
 
 		NodeChainLerpGenerator(RE::BGSFadeNode* a_fadeNode, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData a_physicsData = PhysicsData()) :
-			fadeNode(a_fadeNode), lastTime(0), eta(0)
+			fadeNode(a_fadeNode), lastLocalTime(0), etaLocal(0), lastSystemTime(0)
 		{
 			build(a_fadeNode, a_chainRootName, a_chainNodeData, a_physicsData);
 		}
@@ -356,13 +359,14 @@ namespace daf
 		std::vector<TransformTarget> minima;  // t = 0
 
 		std::vector<TransformTarget> curTransforms;
-		std::atomic<time_t>          lastTime;
+		std::atomic<time_t>          lastLocalTime;
+		std::atomic<time_t>		     lastSystemTime;
 
 		std::vector<TransformTarget> curTargets;
 		std::vector<TransformTarget> freezeTargets;
 		float						 physicsParamTarget{ 0.0 };	
 		float                        physicsParamFreezeTarget{ 0.0 };
-		std::atomic<time_t>          eta;
+		std::atomic<time_t>          etaLocal;
 
 		time_t fullErectionTimeMs{ 5000 };
 
@@ -375,16 +379,19 @@ namespace daf
 			minima.clear();
 			curTransforms.clear();
 			curTargets.clear();
-			lastTime = 0;
-			eta = 0;
+			lastLocalTime = 0;
+			etaLocal = 0;
 			// Release chain
 			chain.release();
 		}
 
 		bool build(RE::BGSFadeNode* a_actor3DRoot, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData& a_physicsData, bool a_noPhysics = false);
 
+		// Update the node chain with system time. Limited with delta_time_clamp to avoid large delta time. 0 means no limit.
+		void updateWithSystemTime(time_t systemTime, time_t delta_time_clamp = 0);
+
 		// Update the node chain.
-		void update(time_t currentTime);
+		void updateWithDeltaTime(time_t deltaTime);
 
 		// True if the state changed.
 		bool setActive(bool active)
@@ -417,8 +424,7 @@ namespace daf
 
 			setInterpolatedTargets_Impl(t);
 
-			time_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			eta = now + transition_time;
+			etaLocal = lastLocalTime + transition_time;
 		}
 
 		// Set interpolated targets at 't'.
@@ -433,13 +439,16 @@ namespace daf
 			setInterpolatedTargets_Impl(t);
 
 			float diff_t = std::abs(physicsParams.t - t);
-			time_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			eta = now + time_t(diff_t * float(fullErectionTimeMs) / speed_multiplier);
+			etaLocal = lastLocalTime + time_t(diff_t * float(fullErectionTimeMs) / speed_multiplier);
 		}
 
-		// Freeze at custom targets.
-		bool freezeAtTargets_Delayed(const std::vector<TransformTarget>& targets, float physicsParamTarget, time_t transition_time = 0)
+		// Freeze at custom targets. Return false if already freezed.
+		bool freezeAtTargets_Delayed(const std::vector<TransformTarget>& targets, float physicsParamTarget, time_t transition_time = 0, bool forced = false)
 		{
+			if (!forced && isFreezed) {
+				return false;
+			}
+
 			std::lock_guard _lock(_this_lock);
 			if (targets.size() != curTargets.size()) {
 				logger::error("Invalid target size {}, expecting targets vector with {} TransformTargets.", targets.size(), curTargets.size());
@@ -451,15 +460,18 @@ namespace daf
 			if (physicsParamTarget >= 0.f && physicsParamTarget <= 1.f) {
 				this->physicsParamFreezeTarget = physicsParamTarget;
 			}
-			time_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			eta = now + transition_time;
+			etaLocal = lastLocalTime + transition_time;
 
 			return true;
 		}
 
-		// Freeze at interpolated targets at 't'.
-		void freezeAtT_Delayed(float t, time_t transition_time = 0)
+		// Freeze at interpolated targets at 't'. Return false if already freezed.
+		bool freezeAtT_Delayed(float t, time_t transition_time = 0, bool forced = false)
 		{
+			if (!forced && isFreezed) {
+				return false;
+			}
+
 			// Clamp t
 			t = std::clamp(t, 0.0f, 1.0f);
 
@@ -467,13 +479,16 @@ namespace daf
 
 			freezeAt_Impl(t);
 
-			time_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			eta = now + transition_time;
+			etaLocal = lastLocalTime + transition_time;
 		}
 
-		// Freeze at interpolated targets at 't', with auto transition time.
-		void freezeAtT_Propotional(float t, float speed_multiplier = 1.f)
+		// Freeze at interpolated targets at 't', with auto transition time. Return false if already freezed.
+		bool freezeAtT_Propotional(float t, float speed_multiplier = 1.f, bool forced = false)
 		{
+			if (!forced && isFreezed) {
+				return false;
+			}
+
 			// Clamp t
 			t = std::clamp(t, 0.0f, 1.0f);
 			speed_multiplier = std::clamp(speed_multiplier, 0.01f, 10.f);
@@ -482,9 +497,8 @@ namespace daf
 
 			freezeAt_Impl(t);
 
-			float  diff_t = std::abs(physicsParams.t - physicsParamFreezeTarget);
-			time_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			eta = now + time_t(diff_t * float(fullErectionTimeMs) / speed_multiplier);
+			float diff_t = std::abs(physicsParams.t - physicsParamFreezeTarget);
+			etaLocal = lastLocalTime + time_t(diff_t * float(fullErectionTimeMs) / speed_multiplier);
 		}
 
 		// Resume and proceed to original targets.
@@ -498,7 +512,7 @@ namespace daf
 
 			unfreeze_Impl();
 
-			eta = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() + transition_time;
+			etaLocal = lastLocalTime + transition_time;
 		}
 
 		// Resume and proceed to original targets, with auto transition time.
@@ -515,12 +529,11 @@ namespace daf
 			unfreeze_Impl();
 			
 			float diff_t = std::abs(physicsParamTarget - physicsParamFreezeTarget);
-			time_t now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			eta = now + time_t(diff_t * float(fullErectionTimeMs) / speed_multiplier);
+			etaLocal = lastLocalTime + time_t(diff_t * float(fullErectionTimeMs) / speed_multiplier);
 		}
 
 		bool targetArrived() {
-			return eta < lastTime;
+			return etaLocal < lastLocalTime;
 		}
 
 		PhysicsNodeChain* getPhysicsChain()

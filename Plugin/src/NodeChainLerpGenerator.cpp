@@ -61,6 +61,10 @@ bool daf::NodeChainLerpGenerator::build(RE::BGSFadeNode* a_actor3DRoot, const st
 	if (hasPhysics) {
 		double mass, stiffness, angularDamping, linearDrag;
 		auto   parsed = parsePhysicsData(a_physicsData, mass, stiffness, angularDamping, linearDrag);
+		mass = std::max(0.01, mass);
+		stiffness = std::max(0.1, stiffness);
+		angularDamping = std::max(0.1, angularDamping);
+		linearDrag = std::max(0.0, linearDrag);
 		chain = std::make_unique<PhysicsNodeChain>(mass, stiffness, angularDamping, linearDrag);
 	} else {
 		chain = std::make_unique<DirectNodeChain>();
@@ -70,11 +74,25 @@ bool daf::NodeChainLerpGenerator::build(RE::BGSFadeNode* a_actor3DRoot, const st
 	setNodeChainOverlayTransform(curTargets);
 	this->isActive = true;
 
-	lastTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+	lastLocalTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+	lastSystemTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 	return true;
 }
 
-void daf::NodeChainLerpGenerator::update(time_t currentTime)
+void daf::NodeChainLerpGenerator::updateWithSystemTime(time_t systemTime, time_t delta_time_clamp)
+{
+	time_t deltaTime = systemTime - lastSystemTime;
+
+	if (delta_time_clamp != 0 && deltaTime > delta_time_clamp) {
+		deltaTime = delta_time_clamp;
+	}
+
+	updateWithDeltaTime(deltaTime);
+
+	this->lastSystemTime = systemTime;
+}
+
+void daf::NodeChainLerpGenerator::updateWithDeltaTime(time_t deltaTime)
 {
 	if (!isActive) {
 		return;
@@ -82,23 +100,25 @@ void daf::NodeChainLerpGenerator::update(time_t currentTime)
 
 	std::lock_guard _lock(_this_lock);
 
-	chain->update(lastTime, currentTime);
+	time_t currentLocalTime = lastLocalTime + deltaTime;
 
-	if (eta < lastTime) {
+	chain->update(lastLocalTime, currentLocalTime);
+
+	if (etaLocal < lastLocalTime) {
 		this->requestUpdate();
-		this->lastTime = currentTime;
+		this->lastLocalTime = currentLocalTime;
 		return;
 	}
 
 	auto& target = isFreezed ? freezeTargets : curTargets;
 	auto  paramTarget = isFreezed ? physicsParamFreezeTarget : physicsParamTarget;
 
-	if (currentTime >= eta) {
+	if (currentLocalTime >= etaLocal) {
 		setNodeChainOverlayTransform(target);
 		physicsParams.t = paramTarget;
 		updatePhysicsData();
 	} else {
-		double t = (double)(currentTime - lastTime) / (double)(eta - lastTime);
+		double t = (double)(deltaTime) / (double)(etaLocal - lastLocalTime);
 		interpolate_Impl(t, curTransforms, target, curTransforms);
 		physicsParams.t = interpolate_float_Impl(t, physicsParams.t, paramTarget);
 		setNodeChainOverlayTransform(curTransforms);
@@ -106,7 +126,7 @@ void daf::NodeChainLerpGenerator::update(time_t currentTime)
 	}
 
 	this->requestUpdate();
-	this->lastTime = currentTime;
+	this->lastLocalTime = currentLocalTime;
 	return;
 }
 
