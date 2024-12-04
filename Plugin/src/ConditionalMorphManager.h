@@ -4,30 +4,34 @@
 #include "MorphEvaluationRuleSet.h"
 #include "SingletonBase.h"
 
+#include "MutexUtils.h"
+
 namespace daf
 {
-	extern constexpr time_t MenuActorUpdateInterval_ms = 300;
-	extern constexpr time_t ActorUpdateInterval_ms = 500;
+	extern constexpr time_t MenuActorUpdateInterval_ms = 200;
+	extern constexpr time_t ActorUpdateInterval_ms = 300;
+	extern constexpr time_t ActorPendingUpdateDelay_ms = 0;
 	extern constexpr float  DiffThreshold = 0.05f;
 
 	namespace tokens
 	{
-		inline constexpr std::string conditional_morph_manager{ "ECOffset_" };
+		inline constexpr std::string conditional_chargen_morph_manager{ "ECOffset_" };
 	}
 
 
-	class ConditionalMorphManager :
-		public utils::SingletonBase<ConditionalMorphManager>,
-		public events::ArmorOrApparelEquippedEventDispatcher::Listener,
+	class ConditionalChargenMorphManager :
+		public utils::SingletonBase<ConditionalChargenMorphManager>,
 		public events::GameDataLoadedEventDispatcher::Listener,
+		public events::EventDispatcher<events::ArmorOrApparelEquippedEvent>::Listener,
+		public events::EventDispatcher<events::ActorEquipManagerEquipEvent>::Listener,
 		public events::EventDispatcher<events::ActorUpdateEvent>::Listener,
 		public events::EventDispatcher<events::ActorFirstUpdateEvent>::Listener,
 		public RE::BSTEventSink<RE::SaveLoadEvent>
 	{
-		friend class utils::SingletonBase<ConditionalMorphManager>;
-	public:
+		friend class utils::SingletonBase<ConditionalChargenMorphManager>;
 
-		virtual ~ConditionalMorphManager() = default;
+	public:
+		virtual ~ConditionalChargenMorphManager() = default;
 
 		void OnEvent(const events::ArmorOrApparelEquippedEvent& a_event, events::EventDispatcher<events::ArmorOrApparelEquippedEvent>* a_dispatcher) override
 		{
@@ -37,20 +41,37 @@ namespace daf
 
 			{
 				tbb::concurrent_hash_map<RE::TESFormID, time_t>::accessor acc;
-				if (!actor || !m_actor_watchlist.find(acc, actor->formID)) {
+				if (!m_actor_watchlist.find(acc, actor->formID)) {
 					return;
 				}
+				acc->second = a_event.when();
 			}
 
 			switch (equip_type) {
 			case events::ArmorOrApparelEquippedEvent::EquipType::kEquip:
-				//logger::c_info("Armor Keyword Morph: {} equipped", utils::make_str(a_event.actor));
+				logger::info("Armor Keyword Morph: {} equipped", utils::make_str(a_event.actor));
 				m_actors_pending_reevaluation.insert(actor);
 				break;
 			case events::ArmorOrApparelEquippedEvent::EquipType::kUnequip:
-				//logger::c_info("Armor Keyword Morph: {} unequipped", utils::make_str(a_event.actor));
+				logger::info("Armor Keyword Morph: {} unequipped", utils::make_str(a_event.actor));
 				m_actors_pending_reevaluation.insert(actor);
 				break;
+			}
+		}
+
+		void OnEvent(const events::ActorEquipManagerEquipEvent& a_event, events::EventDispatcher<events::ActorEquipManagerEquipEvent>* a_dispatcher) override
+		{ // Handle Menu Actors since they don't send regular equip/unequip events
+			auto equip_type = a_event.equipType;
+			auto actor = a_event.actor;
+			auto armo = a_event.armorOrApparel;
+
+			if (!utils::IsActorMenuActor(actor)) {
+				return;
+			}
+
+			{
+				std::lock_guard lock(m_menu_actor_last_update_time_lock);
+				this->m_menu_actor_last_update_time = a_event.when();
 			}
 		}
 
@@ -67,12 +88,16 @@ namespace daf
 		{
 			//logger::c_info("Actor {} updated with deltaTime: {} ms, timeStamp {}", utils::make_str(a_event.actor), a_event.deltaTime * 1000, a_event.when());
 			auto actor = a_event.actor;
-			if (utils::IsActorMenuActor(a_event.actor) && a_event.when() - menu_actor_last_update_time > MenuActorUpdateInterval_ms) {
-				menu_actor_last_update_time = a_event.when();
-				if (this->ReevaluateActorMorph(actor)) {
-					actor->UpdateChargenAppearance();
+			{
+				std::lock_guard lock(m_menu_actor_last_update_time_lock);
+				if (utils::IsActorMenuActor(a_event.actor) && a_event.when() - m_menu_actor_last_update_time > MenuActorUpdateInterval_ms) {
+					m_menu_actor_last_update_time = a_event.when();
+					if (this->ReevaluateActorMorph(actor)) {
+						logger::info("MenuActor {} updating morphs", utils::make_str(actor));
+						actor->UpdateChargenAppearance(); // Actors seems to partially copy morphs from MenuActors, this is bad
+					}
+					return;
 				}
-				return;
 			}
 
 			{
@@ -83,11 +108,15 @@ namespace daf
 
 				// Reevaluate immediately if the actor is pending reevaluation
 				if (m_actors_pending_reevaluation.contains(actor)) {
+					if (a_event.when() - acc->second < ActorPendingUpdateDelay_ms) {
+						return;
+					}
 					std::lock_guard lock(m_actors_pending_reevaluation_erase_lock);
 					acc->second = a_event.when();
 					if (this->ReevaluateActorMorph(actor)) {
-						actor->UpdateChargenAppearance();
 					}
+					logger::info("Actor {} updating morphs", utils::make_str(actor));
+					actor->UpdateChargenAppearance();
 					m_actors_pending_reevaluation.unsafe_erase(actor);
 					return;
 				}
@@ -96,6 +125,7 @@ namespace daf
 				if (a_event.when() - acc->second > ActorUpdateInterval_ms) {
 					acc->second = a_event.when();
 					if (this->ReevaluateActorMorph(actor)) {
+						logger::info("Actor {} updating morphs regular", utils::make_str(actor));
 						actor->UpdateChargenAppearance();
 					}
 					return;
@@ -116,6 +146,7 @@ namespace daf
 
 				acc->second = a_event.when();
 				if (this->ReevaluateActorMorph(actor)) {
+					logger::info("Actor {} updating morphs first", utils::make_str(actor));
 					actor->UpdateChargenAppearance();
 				}
 			}
@@ -125,14 +156,20 @@ namespace daf
 		{
 			logger::info("Save loaded.");
 
+			daf::MorphRuleSetManager::GetSingleton().LoadRulesets(utils::GetPluginFolder() + "\\Rulesets");
+
 			return RE::BSEventNotifyControl::kContinue;
 		}
 
-		void Watch(RE::Actor* a_actor)
+		void Watch(RE::Actor* a_actor, bool a_pendingUpdate = true)
 		{
 			if (a_actor) {
 				tbb::concurrent_hash_map<RE::TESFormID, time_t>::accessor acc;
-				m_actor_watchlist.insert(acc, { a_actor->formID, 0 });
+				if (!m_actor_watchlist.find(acc, a_actor->formID)) {
+					m_actor_watchlist.insert(acc, { a_actor->formID, 0 });
+				}
+			}
+			if (a_pendingUpdate) {
 				m_actors_pending_reevaluation.insert(a_actor);
 			}
 		}
@@ -147,7 +184,8 @@ namespace daf
 
 		void Register()
 		{
-			events::ArmorOrApparelEquippedEventDispatcher::GetSingleton()->AddStaticListener(this);
+			events::ArmorOrApparelEquippedEventDispatcher::GetSingleton()->EventDispatcher<events::ArmorOrApparelEquippedEvent>::AddStaticListener(this);
+			events::ArmorOrApparelEquippedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorEquipManagerEquipEvent>::AddStaticListener(this);
 			events::GameDataLoadedEventDispatcher::GetSingleton()->AddStaticListener(this);
 			events::ActorUpdatedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorUpdateEvent>::AddStaticListener(this);
 			events::ActorUpdatedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorFirstUpdateEvent>::AddStaticListener(this);
@@ -166,10 +204,10 @@ namespace daf
 
 			daf::MorphEvaluationRuleSet::ResultTable results;
 
-			daf::DynamicMorphSession session(daf::tokens::conditional_morph_manager, a_actor);
+			daf::DynamicMorphSession session(daf::tokens::conditional_chargen_morph_manager, a_actor);
 
 			{
-				std::lock_guard<std::mutex> rule_set_lock(ruleSet->m_ruleset_mutex);
+				std::lock_guard ruleset_lock(ruleSet->m_ruleset_spinlock);
 				ruleSet->Snapshot(a_actor);
 				ruleSet->Evaluate(results);
 			}
@@ -187,14 +225,15 @@ namespace daf
 		}
 
 	private:
-		ConditionalMorphManager(){};
+		ConditionalChargenMorphManager(){};
 
-		std::mutex                                m_actors_pending_reevaluation_erase_lock;
+		mutex::NonReentrantSpinLock               m_actors_pending_reevaluation_erase_lock;
 		tbb::concurrent_unordered_set<RE::Actor*> m_actors_pending_reevaluation;
 
 		std::mutex                                      m_actor_watchlist_erase_lock;
 		tbb::concurrent_hash_map<RE::TESFormID, time_t> m_actor_watchlist{ { 0x14, 0 } };  // Player_ref
 
-		time_t menu_actor_last_update_time = 0;
+		mutex::NonReentrantSpinLock m_menu_actor_last_update_time_lock;
+		time_t                      m_menu_actor_last_update_time{ 0 };
 	};
 }

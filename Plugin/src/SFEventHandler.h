@@ -7,7 +7,8 @@
 
 namespace events
 {
-	class ArmorOrApparelEquippedEvent: public EventBase
+	// WARNING: This event doesn't contain menu actors
+	class ArmorOrApparelEquippedEvent : public TimedEventBase
 	{
 	public:
 		enum class EquipType
@@ -28,7 +29,53 @@ namespace events
 		EquipType          equipType;
 	};
 
-	class ActorLoadedEvent: public EventBase
+	class ActorEquipManagerEquipEvent : public TimedEventBase
+	{
+	public:
+		enum class EquipType
+		{
+			kEquip,
+			kUnequip
+		};
+
+		ActorEquipManagerEquipEvent(
+			RE::Actor* a_actor, 
+			RE::TESObjectARMO* a_armorOrApparel, 
+			const RE::BGSEquipSlot* a_equipSlot,
+			bool a_queueEquip,
+			bool a_forceEquip,
+			bool a_playSounds,
+			bool a_applyNow,
+			bool a_locked,
+			const RE::BGSEquipSlot* a_slotBeingReplaced,
+			EquipType a_equipType
+		) :
+			actor(a_actor),
+			armorOrApparel(a_armorOrApparel),
+			equipSlot(a_equipSlot),
+			queueEquip(a_queueEquip),
+			forceEquip(a_forceEquip),
+			playSounds(a_playSounds),
+			applyNow(a_applyNow),
+			locked(a_locked),
+			slotBeingReplaced(a_slotBeingReplaced),
+			equipType(a_equipType)
+		{}
+
+		RE::Actor*         actor;
+		RE::TESObjectARMO* armorOrApparel;
+		const RE::BGSEquipSlot*  equipSlot;
+		bool               queueEquip;
+		bool               forceEquip;
+		bool               playSounds;
+		bool               applyNow;
+		bool               locked; // Equip only
+		const RE::BGSEquipSlot*  slotBeingReplaced; // Unequip only
+		EquipType          equipType;
+	};
+
+	// WARNING: This event doesn't contain player actor
+	class ActorLoadedEvent : public TimedEventBase
 	{
 	public:
 		ActorLoadedEvent(RE::Actor* a_actor, bool a_loaded) :
@@ -40,7 +87,7 @@ namespace events
 		bool       loaded;
 	};
 
-	class ActorReferenceSet3dEvent: public EventBase
+	class ActorReferenceSet3dEvent : public TimedEventBase
 	{
 	public:
 		ActorReferenceSet3dEvent(RE::Actor* a_actor) :
@@ -64,23 +111,16 @@ namespace events
 		bool       unk1;
 	};
 
-	class ActorUpdateEvent : public EventBase
+	class ActorUpdateEvent : public TimedEventBase
 	{
 	public:
 		ActorUpdateEvent(RE::Actor* a_actor, float a_deltaTime) :
 			actor(a_actor),
-			deltaTime(a_deltaTime),
-			lastUpdateTime(std::chrono::steady_clock::now())
+			deltaTime(a_deltaTime)
 		{}
 
 		RE::Actor*								actor;
 		float									deltaTime;
-		std::chrono::steady_clock::time_point	lastUpdateTime;
-
-		time_t when() const
-		{
-			return std::chrono::duration_cast<std::chrono::milliseconds>(lastUpdateTime.time_since_epoch()).count();
-		}
 	};
 
 	class ActorFirstUpdateEvent : public ActorUpdateEvent 
@@ -104,7 +144,10 @@ namespace events
 	class ArmorOrApparelEquippedEventDispatcher :
 		public RE::BSTEventSink<RE::TESEquipEvent>,
 		public RE::BSTEventSink<RE::ActorItemEquipped::Event>,
-		public EventDispatcher<ArmorOrApparelEquippedEvent>
+		public hooks::ActorEquipManagerEquipFuncHook::Listener,
+		public hooks::ActorEquipManagerUnequipFuncHook::Listener,
+		public EventDispatcher<ArmorOrApparelEquippedEvent>,
+		public EventDispatcher<ActorEquipManagerEquipEvent>
 	{
 	public:
 		using EventResult = RE::BSEventNotifyControl;
@@ -127,7 +170,7 @@ namespace events
 
 				auto equip_type = a_event.equipped ? ArmorOrApparelEquippedEvent::EquipType::kEquip : ArmorOrApparelEquippedEvent::EquipType::kUnequip;
 
-				this->Dispatch({ actor, armo_form, equip_type });
+				this->EventDispatcher<ArmorOrApparelEquippedEvent>::Dispatch({ actor, armo_form, equip_type });
 			}
 
 			return EventResult::kContinue;
@@ -140,16 +183,69 @@ namespace events
 			auto actor = a_event.actor.get();
 			auto object_form = a_event.item;
 			if (auto armo_form = object_form->As<RE::TESObjectARMO>(); armo_form != nullptr && actor != nullptr) {
-				this->Dispatch({ actor, armo_form, ArmorOrApparelEquippedEvent::EquipType::kEquip2 });
+				this->EventDispatcher<ArmorOrApparelEquippedEvent>::Dispatch({ actor, armo_form, ArmorOrApparelEquippedEvent::EquipType::kEquip2 });
 			}
 			return EventResult::kContinue;
+		}
+
+		void OnEvent(const hooks::ActorEquipManagerEquipFuncHook::Listener::event_type& a_event, hooks::ActorEquipManagerEquipFuncHook::Listener::dispatcher_type* a_dispatcher) override
+		{
+			auto manager = a_event.GetArg<0>();
+			auto actor = a_event.GetArg<1>();
+			auto& objectInstance = a_event.GetArg<2>();
+
+			RE::TESObjectARMO* armorOrApparel = nullptr;
+			if (armorOrApparel = objectInstance.object->As<RE::TESObjectARMO>(); armorOrApparel == nullptr || actor == nullptr) {
+				return;
+			}
+
+			/*RE::TESObjectARMOInstanceData* ARMOinstanceData = nullptr;
+			auto*              instanceData = objectInstance.instanceData.get();
+			if (instanceData) {
+				ARMOinstanceData = reinterpret_cast<RE::TESObjectARMOInstanceData*>(instanceData);
+			}*/
+
+			auto equipSlot = a_event.GetArg<3>();
+			auto queueEquip = a_event.GetArg<4>();
+			auto forceEquip = a_event.GetArg<5>();
+			auto playSounds = a_event.GetArg<6>();
+			auto applyNow = a_event.GetArg<7>();
+			auto locked = a_event.GetArg<8>();
+
+			this->EventDispatcher<ActorEquipManagerEquipEvent>::Dispatch({ actor, armorOrApparel, equipSlot, queueEquip, forceEquip, playSounds, applyNow, locked, nullptr, ActorEquipManagerEquipEvent::EquipType::kEquip });
+		}
+
+		void OnEvent(const hooks::ActorEquipManagerUnequipFuncHook::Listener::event_type& a_event, hooks::ActorEquipManagerUnequipFuncHook::Listener::dispatcher_type* a_dispatcher) override
+		{
+			auto manager = a_event.GetArg<0>();
+			auto actor = a_event.GetArg<1>();
+			auto& objectInstance = a_event.GetArg<2>();
+
+			RE::TESObjectARMO* armorOrApparel = nullptr;
+			if (armorOrApparel = objectInstance.object->As<RE::TESObjectARMO>(); armorOrApparel == nullptr || actor == nullptr) {
+				return;
+			}
+
+			auto equipSlot = a_event.GetArg<3>();
+			auto queueEquip = a_event.GetArg<4>();
+			auto forceEquip = a_event.GetArg<5>();
+			auto playSounds = a_event.GetArg<6>();
+			auto applyNow = a_event.GetArg<7>();
+			auto slotBeingReplaced = a_event.GetArg<8>();
+
+			this->EventDispatcher<ActorEquipManagerEquipEvent>::Dispatch({ actor, armorOrApparel, equipSlot, queueEquip, forceEquip, playSounds, applyNow, false, slotBeingReplaced, ActorEquipManagerEquipEvent::EquipType::kUnequip });
 		}
 
 		void Register()
 		{
 			RE::TESEquipEvent::GetEventSource()->RegisterSink(this);
 			RE::ActorItemEquipped::Event::GetEventSource()->RegisterSink(this);
+			hooks::ActorEquipManagerEquipFuncHook::GetSingleton()->AddStaticListener(this);
+			hooks::ActorEquipManagerUnequipFuncHook::GetSingleton()->AddStaticListener(this);
 		}
+
+	private:
+		ArmorOrApparelEquippedEventDispatcher() { this->Register(); }
 	};
 
 	class ActorLoadedEventDispatcher :
@@ -185,6 +281,9 @@ namespace events
 		{
 			Event::GetEventSource()->RegisterSink(this);
 		}
+
+	private:
+		ActorLoadedEventDispatcher() { this->Register(); }
 	};
 	
 	class ActorReferenceSet3dEventDispatcher :
@@ -220,7 +319,9 @@ namespace events
 		{
 			Event::GetEventSource()->RegisterSink(this);
 		}
-	
+
+	private:
+		ActorReferenceSet3dEventDispatcher() { this->Register(); }
 	};
 
 	class GameDataLoadedEventDispatcher :
@@ -303,6 +404,8 @@ namespace events
 		}
 
 	protected:
+		ActorUpdatedEventDispatcher() { this->Register(); }
+
 		void WatchInstance(RE::Actor* a_actor)
 		{
 			m_actor_updated.insert({ a_actor, false });
@@ -345,14 +448,4 @@ namespace events
 
 		tbb::concurrent_hash_map<RE::Actor*, bool> m_actor_updated;
 	};
-
-	inline void RegisterHandlers()
-	{
-		ArmorOrApparelEquippedEventDispatcher::GetSingleton()->Register();
-		ActorLoadedEventDispatcher::GetSingleton()->Register();
-		ActorReferenceSet3dEventDispatcher::GetSingleton()->Register();
-		//GameDataLoadedEventDispatcher::GetSingleton()->Register();
-		//ActorInitializedEventDispatcher::GetSingleton()->Register();
-		ActorUpdatedEventDispatcher::GetSingleton()->Register();
-	}
 }

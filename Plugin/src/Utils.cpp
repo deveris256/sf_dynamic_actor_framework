@@ -1,4 +1,6 @@
 #include "Utils.h"
+#include "LogWrapper.h"
+#include "HookManager.h"
 
 std::string utils::GetPluginFolder()
 {
@@ -124,4 +126,42 @@ bool utils::caseInsensitiveCompare(const std::string& str, const char* cstr)
 		}
 	}
 	return true;
+}
+
+float utils::GetActorValue(RE::Actor* a_actor, const std::string& a_avName, bool a_log)
+{
+	RE::ActorValueInfo* avInfo = RE::TESObjectREFR::LookupByEditorID<RE::ActorValueInfo>(a_avName.c_str());
+	if (!avInfo) {
+		if (a_log) {
+			logger::error("Actor value {} not found", a_avName);
+		}
+		return 0.0f;
+	}
+	float value = a_actor->GetActorValue(*avInfo);
+	if (a_log) {
+		logger::info("Actor value {} is {}", a_avName, value);
+	}
+	return value;
+}
+
+bool utils::ShouldActorShowSpacesuit(RE::Actor* a_actor)
+{
+	static auto ActorShouldShowSpacesuit = RE::TESObjectREFR::LookupByID<RE::BGSConditionForm>(0x194ABf);
+	if (!ActorShouldShowSpacesuit) {
+		logger::error("ConditionForm ActorShouldShowSpacesuit not found");
+		return false;
+	}
+	RE::ConditionCheckParams params;
+	params.actionRef.reset(a_actor);
+	return hooks::funcs::EvaluateConditionChain(ActorShouldShowSpacesuit, params);
+}
+
+std::uint32_t utils::GetARMOModelOccupiedSlots(RE::TESObjectARMO* a_armo)
+{
+	uint32_t slots = 0;
+	for (const auto& model : a_armo->modelArray) {
+		auto arma = model.armorAddon;
+		slots &= arma->bipedModelData.bipedObjectSlots;
+	}
+	return slots;
 }

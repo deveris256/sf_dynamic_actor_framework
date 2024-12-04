@@ -1,6 +1,8 @@
 #pragma once
 #include "LogWrapper.h"
 #include "SingletonBase.h"
+#include "EvaluatableExprBase.h"
+#include "MutexUtils.h"
 
 #include "DynamicMorphSession.h"
 
@@ -9,18 +11,23 @@ namespace daf
 	class MorphEvaluationRuleSet
 	{
 	public:
-		using Parser = exprtk::parser<float>;
-		using Expression = exprtk::expression<float>;
 		using SymbolTable = exprtk::symbol_table<float>;
 		using Symbol = std::string_view;
-
-		using AcquisitionFunction = std::function<float(RE::Actor*, RE::TESNPC*)>;
 
 		enum class CollisionBehavior : uint8_t
 		{
 			kOverwrite,
 			kAppend
 		};
+
+		enum class ActorArmorVisableLayer : uint8_t
+		{
+			kApparel = 1 << 0,
+			kSpaceSuit = 1 << 1,
+			kAny = kApparel | kSpaceSuit
+		};
+
+		using AcquisitionFunction = std::function<float(RE::Actor*, RE::TESNPC*, ActorArmorVisableLayer)>;
 
 		class Alias
 		{
@@ -30,9 +37,13 @@ namespace daf
 				kNone = 0,
 				kActorValue = 1 << 0,
 				kWornKeyword = 1 << 1,
-				kNPCKeyword = 1 << 2,
-				kMorph = 1 << 3,
-				kAny = kActorValue | kWornKeyword | kNPCKeyword | kMorph
+				kVisibleWornKeyword = 1 << 2,
+				kNPCKeyword = 1 << 3,
+				kMorph = 1 << 4,
+				kHeadpart = 1 << 5,
+				kEquipmentKeyword = kWornKeyword | kVisibleWornKeyword,
+				kKeyword = kWornKeyword | kVisibleWornKeyword | kNPCKeyword,
+				kAny = kActorValue | kWornKeyword | kVisibleWornKeyword | kNPCKeyword | kMorph
 			};
 
 			Alias() = default;
@@ -57,36 +68,34 @@ namespace daf
 			std::vector<Symbol> equivalent_symbols;
 		};
 
-		class Rule
+		class Rule : public utils::Evaluatable<float>
 		{
 		public:
 			MorphEvaluationRuleSet* parent_rule_set{ nullptr };
 
 			std::string_view target_morph_name;
-			Expression       expr;
 			bool             is_setter{ false };
 
 			std::vector<Alias*>      external_symbols;
 			std::vector<std::string> internal_symbols;
 
-			std::string compiler_error;
-			bool        is_valid{ false };
-
-			Rule() = default;
 			Rule(MorphEvaluationRuleSet* a_parentRuleSet, bool a_isSetter) :
+				Evaluatable<float>(0.f),
 				parent_rule_set(a_parentRuleSet), is_setter(a_isSetter) {}
 
-			bool Parse(const std::string& expr_str, SymbolTable& symbol_table)
+			bool Parse(const std::string& expr_str, _SymbolTable_T& symbol_table) override
 			{
+				this->symbol_table = &symbol_table;
 				expr.register_symbol_table(symbol_table);
-				Parser parser(Parser::settings_t::e_collect_vars);
+				_Parser_T parser(_Parser_T::settings_t::e_collect_vars);
 				if (!parser.compile(expr_str, expr)) {
 					compiler_error = parser.error();
+					use_expr = false;
 					return false;
 				}
 				auto& all_symbols = parser.dec().symbol_list();
 				for (auto& symbol : all_symbols) {
-					if (symbol.second == Parser::symbol_type::e_st_variable) {
+					if (symbol.second == _Parser_T::symbol_type::e_st_variable) {
 						if (auto it = parent_rule_set->m_aliases.find(symbol.first); it != parent_rule_set->m_aliases.end()) {
 							external_symbols.emplace_back(&it->second);
 						} else {
@@ -94,21 +103,8 @@ namespace daf
 						}
 					}
 				}
-				is_valid = true;
+				use_expr = true;
 				return true;
-			}
-
-			float Evaluate()
-			{
-				if (!is_valid) {
-					return 0.f;
-				}
-				return expr.value();
-			}
-
-			const std::string& GetCompilerError() const
-			{
-				return compiler_error;
 			}
 		};
 
@@ -143,7 +139,7 @@ namespace daf
 		{
 			/*
 			* JSON format:
-			* {"Aliases": { symbol: { "EditorID": editorID, ["Type": actorValue|wornKeyword|npcKeyword|morph, "Default": default_value] }, ...},
+			* {"Aliases": { symbol: { "EditorID": editorID, ["Type": actorValue|wornKeyword|visibleWornKeyword|npcKeyword|morph, "Default": default_value] }, ...},
 			*  "Rules": { "Adders": {morphName0: "expression0", ...}, "Setters": {morphName1: "expression1", ...}}
 			*/
 			std::ifstream file(a_filename);
@@ -187,10 +183,14 @@ namespace daf
 							alias_type = Alias::Type::kActorValue;
 						} else if (type_str == "wornKeyword") {
 							alias_type = Alias::Type::kWornKeyword;
+						} else if (type_str == "visibleWornKeyword") {
+							alias_type = Alias::Type::kVisibleWornKeyword;
 						} else if (type_str == "npcKeyword") {
 							alias_type = Alias::Type::kNPCKeyword;
 						} else if (type_str == "morph") {
 							alias_type = Alias::Type::kMorph;
+						} else if (type_str == "headpart") {
+							alias_type = Alias::Type::kHeadpart;
 						} else {
 							logger::warn("When parsing Alias '{}': Unknown Alias type: '{}', using automatic type.", alias, type_str);
 						}
@@ -256,48 +256,66 @@ namespace daf
 			}
 
 			if (auto avi = ParseSymbolAsActorValue(editorID); (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kActorValue)) && avi) {
-				//m_actor_value_symbols[alias] = avi;
 				m_aliases[alias] = { 
 					alias, 
 					editorID, 
 					Alias::Type::kActorValue, 
-					[avi](RE::Actor* actor, RE::TESNPC* npc) -> float {
+					[avi](RE::Actor* actor, RE::TESNPC* npc, ActorArmorVisableLayer) -> float {
 						return AcquireActorValue(actor, npc, avi);
 					}
 				};
 				m_loaded = true;
 				return true;
 			} else if (auto keyword = ParseSymbolAsKeyword(editorID); (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kWornKeyword)) && keyword) {
-				//m_keyword_symbols[alias] = keyword;
 				m_aliases[alias] = {
 					alias,
 					editorID,
 					Alias::Type::kWornKeyword,
-					[keyword](RE::Actor* actor, RE::TESNPC* npc) -> float {
-						return AcquireWornKeywordValue(actor, npc, keyword);
+					[keyword](RE::Actor* actor, RE::TESNPC* npc, ActorArmorVisableLayer) -> float {
+						return AcquireWornKeywordValue(actor, npc, keyword, ActorArmorVisableLayer::kAny);
+					}
+				};
+				m_loaded = true;
+				return true;
+			} else if (auto keyword = ParseSymbolAsKeyword(editorID); (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kVisibleWornKeyword)) && keyword) {
+				m_aliases[alias] = {
+					alias,
+					editorID,
+					Alias::Type::kWornKeyword,
+					[keyword](RE::Actor* actor, RE::TESNPC* npc, ActorArmorVisableLayer visLayer) -> float {
+						return AcquireWornKeywordValue(actor, npc, keyword, visLayer);
 					}
 				};
 				m_loaded = true;
 				return true;
 			} else if (auto keyword = ParseSymbolAsKeyword(editorID); (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kNPCKeyword)) && keyword) {
-				//m_keyword_symbols[alias] = keyword;
 				m_aliases[alias] = {
 					alias,
 					editorID,
 					Alias::Type::kNPCKeyword,
-					[keyword](RE::Actor* actor, RE::TESNPC* npc) -> float {
+					[keyword](RE::Actor* actor, RE::TESNPC* npc, ActorArmorVisableLayer) -> float {
 						return AcquireNPCKeywordValue(actor, npc, keyword);
 					}
 				};
 				m_loaded = true;
 				return true;
+			} else if (auto headpart = ParseSymbolAsHeadPart(editorID); (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kHeadpart)) && headpart) {
+				m_aliases[alias] = {
+					alias,
+					editorID,
+					Alias::Type::kHeadpart,
+					[headpart](RE::Actor* actor, RE::TESNPC* npc, ActorArmorVisableLayer) -> float {
+						return AcquireHeadPartValue(actor, npc, headpart);
+					}
+				};
+				m_loaded = true;
+				return true;
 			} else if (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kMorph)) {
-				//m_morph_symbols[alias] = editorID;
 				m_aliases[alias] = {
 					alias,
 					editorID,
 					Alias::Type::kMorph,
-					[editorID](RE::Actor* actor, RE::TESNPC* npc) -> float {
+					[editorID](RE::Actor* actor, RE::TESNPC* npc, ActorArmorVisableLayer) -> float {
 						return AcquireMorphValue(actor, npc, editorID);
 					}
 				};
@@ -309,11 +327,9 @@ namespace daf
 			m_value_snapshot.erase(alias);
 			if (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kActorValue)) {
 				last_error = std::format("Cannot parse as ActorValue: Alias: '{}' EditorID: '{}'", alias, editorID);
-			} else if (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kNPCKeyword) || 
-				std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kWornKeyword)) {
+			} else if (std::to_underlying(a_aliasType) & std::to_underlying(Alias::Type::kKeyword)) {
 				last_error = std::format("Cannot parse as Keyword: Alias: '{}' EditorID: '{}'", alias, editorID);
 			}
-			//logger::error(last_error.c_str());
 			return false;
 		}
 
@@ -342,7 +358,7 @@ namespace daf
 			}
 
 			if (!m_rules.contains(target_morph_name)) { // If doesn't have any rules for the morph yet
-				m_rules[target_morph_name] = std::vector<Rule>{ rule };
+				m_rules[target_morph_name] = std::move(std::vector<Rule>{ rule });
 			} else if (a_behavior == CollisionBehavior::kOverwrite) { // If overwriting existing rules
 				m_rules[target_morph_name].clear();
 				m_rules[target_morph_name].emplace_back(rule);
@@ -375,8 +391,17 @@ namespace daf
 			auto npc = a_actor->GetNPC();
 			{
 				std::lock_guard<std::mutex> lock(m_snapshot_mutex);
+
+				auto visible_layer = ActorArmorVisableLayer::kAny;
+
+				if (utils::ShouldActorShowSpacesuit(a_actor)) {
+					visible_layer = ActorArmorVisableLayer::kSpaceSuit;
+				} else {
+					visible_layer = ActorArmorVisableLayer::kApparel;
+				}
+
 				for (auto& [symbol, alias] : m_aliases) {
-					m_value_snapshot[symbol] = alias.acquisition_func(a_actor, npc);
+					m_value_snapshot[symbol] = alias.acquisition_func(a_actor, npc, visible_layer);
 				}
 			}
 		}
@@ -414,7 +439,7 @@ namespace daf
 				bool is_setter = false;
 				float value = 0.f;
 				for (auto& rule : rules) {
-					if (!rule.is_valid) {
+					if (!rule.use_expr) {
 						continue;
 					}
 
@@ -440,7 +465,7 @@ namespace daf
 			return m_loaded;
 		}
 
-		std::mutex m_ruleset_mutex;
+		mutex::NonReentrantSpinLock m_ruleset_spinlock;
 
 	private:
 		// Per actor
@@ -502,6 +527,11 @@ namespace daf
 			return RE::TESObjectREFR::LookupByEditorID<RE::BGSKeyword>(symbol);
 		}
 
+		static inline RE::BGSHeadPart* ParseSymbolAsHeadPart(std::string_view symbol)
+		{
+			return RE::TESObjectREFR::LookupByEditorID<RE::BGSHeadPart>(symbol);
+		}
+
 		static inline RE::ActorValueInfo* ParseSymbolAsActorValue(std::string_view symbol)
 		{
 			return RE::TESObjectREFR::LookupByEditorID<RE::ActorValueInfo>(symbol);
@@ -515,13 +545,42 @@ namespace daf
 			return 0.f;
 		}
 
-		static inline float AcquireWornKeywordValue(RE::Actor* actor, RE::TESNPC* npc, RE::BGSKeyword* keyword)
+		static inline float AcquireWornKeywordValue(RE::Actor* actor, RE::TESNPC* npc, RE::BGSKeyword* keyword, ActorArmorVisableLayer visible_layer)
 		{
-			if (actor->WornHasKeyword(keyword)) {
+			/*if (actor->WornHasKeyword(keyword)) {
 				return 1.f;
-			}
+			}*/
 
-			return 0.f;
+			float found = 0.f;
+
+			actor->ForEachEquippedItem([visible_layer, keyword, &found](const RE::BGSInventoryItem& item) -> RE::BSContainer::ForEachResult {
+				auto armor = item.object->As<RE::TESObjectARMO>();
+				if (!armor) {
+					return RE::BSContainer::ForEachResult::kContinue;
+				}
+				auto instanceData = reinterpret_cast<RE::TESObjectARMOInstanceData*>(item.instanceData.get());
+
+				switch (visible_layer) {
+				case ActorArmorVisableLayer::kApparel:
+					if (utils::IsARMOSpacesuit(armor, instanceData)) {
+						return RE::BSContainer::ForEachResult::kContinue;
+					}
+					break;
+				case ActorArmorVisableLayer::kSpaceSuit:
+					if (!utils::IsARMOSpacesuit(armor, instanceData)) {
+						return RE::BSContainer::ForEachResult::kContinue;
+					}
+					break;
+				}
+
+				if (utils::ARMOHasKeyword(armor, instanceData, keyword)) {
+					found = 1.f;
+					return RE::BSContainer::ForEachResult::kStop;
+				}
+				return RE::BSContainer::ForEachResult::kContinue;
+			});
+
+			return found;
 		}
 
 		static inline float AcquireActorValue(RE::Actor* actor, RE::TESNPC* npc, RE::ActorValueInfo* actor_value_info)
@@ -552,6 +611,21 @@ namespace daf
 				}
 				return 0.f;
 			}
+		}
+
+		static inline float AcquireHeadPartValue(RE::Actor* actor, RE::TESNPC* npc, RE::BGSHeadPart* headpart)
+		{
+			auto  acc = npc->headParts.lock();
+			auto& headparts = *acc;
+
+			for (auto it = headparts.begin(); it != headparts.end(); ++it) {
+				auto headpart = *it;
+				if (headpart == headpart) {
+					return 1.f;
+				}
+			}
+
+			return 0.f;
 		}
 
 		Alias* FindSameAlias(const Alias& a_alias)

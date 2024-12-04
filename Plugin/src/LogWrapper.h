@@ -3,6 +3,8 @@
 #include "spdlog/sinks/basic_file_sink.h"
 #include "spdlog/spdlog.h"
 
+#include "MutexUtils.h"
+
 namespace logger
 {
 	enum class LogLevel : uint8_t
@@ -14,11 +16,18 @@ namespace logger
 	};
 
 	extern std::shared_ptr<spdlog::logger> g_logger;
-	extern std::recursive_mutex			 g_console_logger_mutex;
+	extern mutex::NonReentrantSpinLock     g_console_logger_mutex;
+
+	[[nodiscard]] inline auto setScopedPattern(std::string formatter) {
+		std::function<void()> init_func = [&formatter]() { g_logger->set_pattern(std::move(formatter)); };
+		std::function<void()> release_func = []() { g_logger->set_pattern("[%^%L%$] [%Y-%m-%d %H:%M:%S.%f] [%n] %v"); };
+
+		return std::move(utils::scope_guard_init_release(init_func, release_func));
+	}
 
 	// Output to log file next to the plugin
 	template <LogLevel _Log_LVL, class... Args>
-	void log(const std::format_string<Args...> a_fmt, Args&&... a_args)
+	void log(const std::format_string<Args...> a_fmt, Args&&... a_args) 
 	{
 		std::string log_str = std::vformat(a_fmt.get(), std::make_format_args(a_args...));
 

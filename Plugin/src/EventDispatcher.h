@@ -8,6 +8,23 @@ namespace events
 		virtual ~EventBase() = default;
 	};
 
+	class TimedEventBase : public EventBase
+	{
+	public:
+		TimedEventBase():
+			lastUpdateTime(std::chrono::steady_clock::now())
+		{}
+
+		virtual ~TimedEventBase() = default;
+
+		std::chrono::steady_clock::time_point lastUpdateTime;
+
+		inline time_t when() const
+		{
+			return std::chrono::duration_cast<std::chrono::milliseconds>(lastUpdateTime.time_since_epoch()).count();
+		}
+	};
+
 	template <class _Event_T>
 		requires std::derived_from<_Event_T, EventBase>
 	class EventDispatcher
@@ -26,7 +43,7 @@ namespace events
 		virtual ~EventDispatcher() = default;
 
 		std::vector<std::weak_ptr<Listener>> listeners;
-		std::vector<Listener*>               singleton_listeners;
+		std::vector<Listener*>               static_listeners;
 		std::mutex                           mtx;
 
 		void AddListener(std::shared_ptr<Listener> a_listener)
@@ -38,8 +55,8 @@ namespace events
 		void AddStaticListener(Listener* a_listener)
 		{
 			std::lock_guard lock(mtx);
-			if (std::find(singleton_listeners.begin(), singleton_listeners.end(), a_listener) == singleton_listeners.end()) {
-				singleton_listeners.emplace_back(a_listener);
+			if (std::find(static_listeners.begin(), static_listeners.end(), a_listener) == static_listeners.end()) {
+				static_listeners.emplace_back(a_listener);
 			}
 		}
 
@@ -59,13 +76,13 @@ namespace events
 				),
 				listeners.end()
 			);
-			singleton_listeners.erase(
-				std::remove(singleton_listeners.begin(), singleton_listeners.end(), a_listener),
-				singleton_listeners.end()
+			static_listeners.erase(
+				std::remove(static_listeners.begin(), static_listeners.end(), a_listener),
+				static_listeners.end()
 			);
 		}
 
-		void Dispatch(_Event_T a_event)
+		void Dispatch(_Event_T& a_event)
 		{
 			std::vector<std::shared_ptr<Listener>> active_listeners;
 
@@ -82,9 +99,39 @@ namespace events
 				listener->OnEvent(a_event, this);
 			}
 
-			for (auto& singleton_listener : singleton_listeners) {
-				singleton_listener->OnEvent(a_event, this);
+			for (auto& static_listener : static_listeners) {
+				static_listener->OnEvent(a_event, this);
 			}
+		}
+
+		void Dispatch(_Event_T&& a_event)
+		{
+			std::vector<std::shared_ptr<Listener>> active_listeners;
+
+			_Event_T _event = std::move(a_event);
+			{
+				std::lock_guard lock(mtx);
+				for (auto& weak_listener : listeners) {
+					if (auto listener = weak_listener.lock()) {
+						active_listeners.push_back(listener);
+					}
+				}
+			}
+
+			for (auto& listener : active_listeners) {
+				listener->OnEvent(_event, this);
+			}
+
+			for (auto& static_listener : static_listeners) {
+				static_listener->OnEvent(_event, this);
+			}
+		}
+
+		template<class ..._Args>
+		void Dispatch(_Args&&... a_args)
+		{
+			_Event_T _event(std::forward<_Args>(a_args)...);
+			Dispatch(std::move(_event));
 		}
 	};
 }

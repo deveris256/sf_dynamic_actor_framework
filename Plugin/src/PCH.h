@@ -118,6 +118,12 @@
 // json
 #include "nlohmann/json.hpp"
 
+// yaml-cpp
+#include <yaml-cpp/yaml.h>
+
+// Eigen
+#include <Eigen/Dense>
+
 #undef min
 #undef max
 

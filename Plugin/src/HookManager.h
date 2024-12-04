@@ -95,14 +95,34 @@ namespace hooks
 		inline constexpr REL::ID MAYBE_FormPostInitialized_Func{ 34242 };
 		inline constexpr REL::ID MAYBE_ActorEquipAllItems_Func{ 150387 };
 		inline constexpr REL::ID ActorUpdate_Func{ 151391 };
+		inline constexpr REL::ID TESCondition_EvaluateChain_Func{ 116104 };
+	}
+
+	namespace funcs
+	{
+		inline bool EvaluateConditionChain(RE::BGSConditionForm* a_conditionForm, RE::ConditionCheckParams& a_param)
+		{
+			using func_t = bool (*)(RE::TESConditionItem*, RE::ConditionCheckParams&);
+			static REL::Relocation<func_t> func(addrs::TESCondition_EvaluateChain_Func.address());
+			return func(a_conditionForm->conditions.head, a_param);
+		}
 	}
 
 	using ActorUpdateFuncHook = events::HookFuncCalledEventDispatcher<void, RE::Actor*, float>;
 	extern ActorUpdateFuncHook const* g_actorUpdateFuncHook;
 
+	// bool EquipObject(Actor* a_actor, const BGSObjectInstance& a_object, const BGSEquipSlot* a_slot, bool a_queueEquip, bool a_forceEquip, bool a_playSounds, bool a_applyNow, bool a_locked)
+	using ActorEquipManagerEquipFuncHook = events::HookFuncCalledEventDispatcher<bool, RE::ActorEquipManager*, RE::Actor*, const RE::BGSObjectInstance&, const RE::BGSEquipSlot*, bool, bool, bool, bool, bool>;
+	extern ActorEquipManagerEquipFuncHook const* g_actorEquipManagerEquipFuncHook;
+
+	// bool UnequipObject(Actor* a_actor, const BGSObjectInstance& a_object, const BGSEquipSlot* a_slot, bool a_queueUnequip, bool a_forceUnequip, bool a_playSounds, bool a_applyNow, const BGSEquipSlot* a_slotBeingReplaced)
+	using ActorEquipManagerUnequipFuncHook = events::HookFuncCalledEventDispatcher<bool, RE::ActorEquipManager*, RE::Actor*, const RE::BGSObjectInstance&, const RE::BGSEquipSlot*, bool, bool, bool, bool, const RE::BGSEquipSlot*>;
+	extern ActorEquipManagerUnequipFuncHook const* g_actorEquipManagerUnequipFuncHook;
+
 	inline void InstallHooks()
 	{
 		ActorUpdateFuncHook::GetSingleton()->Install((uintptr_t)addrs::ActorUpdate_Func.address());
+		ActorEquipManagerEquipFuncHook::GetSingleton()->Install((uintptr_t)RE::ID::ActorEquipManager::EquipObject.address());
+		ActorEquipManagerUnequipFuncHook::GetSingleton()->Install((uintptr_t)RE::ID::ActorEquipManager::UnequipObject.address());
 	}
-
 }
