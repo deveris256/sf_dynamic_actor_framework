@@ -3,9 +3,9 @@
 
 namespace daf
 {
-	static constexpr std::string_view overweightMorphName{ "Overweight" };
-	static constexpr std::string_view strongMorphName{ "Strong" };
-	static constexpr std::string_view thinMorphName{ "Thin" };
+	inline constexpr std::string_view overweightMorphName{ "Overweight" };
+	inline constexpr std::string_view strongMorphName{ "Strong" };
+	inline constexpr std::string_view thinMorphName{ "Thin" };
 
 	namespace tokens
 	{
