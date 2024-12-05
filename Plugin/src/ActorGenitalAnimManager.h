@@ -159,6 +159,14 @@ namespace daf
 			}
 			return -1.0f;
 		}
+
+		inline float GetArousalLevelAsT(RE::Actor* a_actor)
+		{
+			if (m_arousalActorValue) {
+				return std::sqrtf(a_actor->GetActorValue(*m_arousalActorValue)) * 0.1f;
+			}
+			return -1.0f;
+		}
 		
 		ActorGenitalAnimManager(){};
 	};

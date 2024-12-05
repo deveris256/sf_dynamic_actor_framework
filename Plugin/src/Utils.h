@@ -1,5 +1,6 @@
 #pragma once
 #include "Exceptions.h"
+#include "ModelDB.h"
 
 namespace utils
 {
@@ -62,7 +63,7 @@ namespace utils
 	{
 		auto npc = a_form->GetNPC();
 		if (npc) {
-			return std::format("NPC:'{}'({:X})", npc->GetFormEditorID(), a_form->GetFormID());
+			return std::format("NPC:'{}'({:X})", npc->GetFormEditorID(), npc->GetFormID());
 		} else {
 			return std::format("'{}'({:X})", a_form->GetDisplayFullName(), a_form->GetFormID());  // Could be potentially crashy
 		}
@@ -183,6 +184,10 @@ namespace utils
 	}
 
 	std::uint32_t GetARMOModelOccupiedSlots(RE::TESObjectARMO* a_armo);
+
+	RE::BGSFadeNode* GetModel(const char* a_modelName);
+
+	RE::BGSFadeNode* GetActorBaseSkeleton(RE::Actor* a_actor);
 
 	template<class _Func_T>
 	class scope_guard

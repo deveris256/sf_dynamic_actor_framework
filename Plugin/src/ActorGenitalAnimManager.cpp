@@ -21,8 +21,7 @@ void daf::ActorGenitalAnimManager::OnEvent(const events::ActorUpdateEvent& a_eve
 	if (when - actorValueEvaluatedAccessor->second < ArousalActorValueEvaluationCooldown) {
 		return;
 	}
-	auto arousalLevel = GetArousalLevel(actor);
-	generator->setAtT_Propotional(arousalLevel / 100.f);
+	generator->setAtT_Propotional(GetArousalLevelAsT(actor));
 	actorValueEvaluatedAccessor->second = when;
 }
 
@@ -31,23 +30,16 @@ void daf::ActorGenitalAnimManager::OnEvent(const events::ActorFirstUpdateEvent& 
 	auto actor = a_event.actor;
 	auto npc = actor->GetNPC();
 
-	{
-		_Generator_Map_T::const_accessor gen_accessor;
-		if (m_actorGenitalAnimGenerators.find(gen_accessor, actor->formID)) {
-			return;
-		}
-	}
-
 	if (actor->IsPlayerRef()) {
 		actor->SetActorValue(*m_arousalActorValue, 100.0);
 	}
 
 	_Pending_Actor_List_T::accessor accessor;
 	if (m_actorsPendingAttachGenerator.find(accessor, actor->formID)) {
-		BuildNodeChainForActor(actor, GetArousalLevel(actor) / 100.f);
+		BuildNodeChainForActor(actor, GetArousalLevelAsT(actor));
 		m_actorsPendingAttachGenerator.erase(accessor);
 	} else if (actor->IsPlayerRef()) {
-		BuildNodeChainForActor(actor, GetArousalLevel(actor) / 100.f);
+		BuildNodeChainForActor(actor, GetArousalLevelAsT(actor));
 	}
 }
 
@@ -69,7 +61,7 @@ void daf::ActorGenitalAnimManager::OnEvent(const events::ActorGenitalChangedEven
 	auto actor = a_event.actor;
 	auto npc = actor->GetNPC();
 
-	if (BuildNodeChainForActor(actor, GetArousalLevel(actor) / 100.f)) {
+	if (BuildNodeChainForActor(actor, GetArousalLevelAsT(actor))) {
 		m_actorsPendingAttachGenerator.erase(actor->formID);  // No need to build again
 	}
 }
@@ -226,13 +218,6 @@ daf::ActorGenitalAnimManager::GenitalAnimData daf::ActorGenitalAnimManager::Load
 
 bool daf::ActorGenitalAnimManager::BuildNodeChainForActor(RE::Actor* a_actor, float init_t, bool a_noPhysics)
 {
-	auto loadedData = a_actor->loadedData.lock_read();
-	auto data3D = reinterpret_cast<RE::BGSFadeNode*>(loadedData->data3D.get());
-	if (!data3D) {
-		logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: Actor has no loaded data. Actor {}", utils::make_str(a_actor));
-		return false;
-	}
-
 	auto genitalHeadpart = ActorHeadpartGenitalManager::GetSingleton().GetActorGenital(a_actor);
 	if (!genitalHeadpart) {
 		logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: No genital headpart found for Actor {}", utils::make_str(a_actor));
@@ -244,7 +229,7 @@ bool daf::ActorGenitalAnimManager::BuildNodeChainForActor(RE::Actor* a_actor, fl
 		auto& genitalAnimData = accessor->second;
 
 		std::unique_ptr<NodeChainLerpGenerator> generator = std::make_unique<NodeChainLerpGenerator>();
-		if (!generator->build(data3D, genitalAnimData.rootNodeName, genitalAnimData.chainNodeData, genitalAnimData.physicsData, a_noPhysics)) {
+		if (!generator->build(a_actor, genitalAnimData.rootNodeName, genitalAnimData.chainNodeData, genitalAnimData.physicsData, a_noPhysics)) {
 			logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: Failed to build node chain for Actor {}", utils::make_str(a_actor));
 			return false;
 		} else {
@@ -259,7 +244,9 @@ bool daf::ActorGenitalAnimManager::BuildNodeChainForActor(RE::Actor* a_actor, fl
 
 		_Generator_Map_T::accessor m_actorGenitalAnimGenerators_acc;
 
-		m_actorGenitalAnimGenerators.insert(m_actorGenitalAnimGenerators_acc, a_actor->formID);
+		if (!m_actorGenitalAnimGenerators.insert(m_actorGenitalAnimGenerators_acc, a_actor->formID)) {
+			m_actorGenitalAnimGenerators_acc->second.release();
+		}
 
 		m_actorGenitalAnimGenerators_acc->second = std::move(generator);
 

@@ -131,14 +131,32 @@ namespace events
 		{}
 	};
 
-	class GameLoadedEvent : public EventBase
+	class GameDataLoadedEvent : public EventBase
 	{
 	public:
-		GameLoadedEvent(SFSE::MessagingInterface::MessageType a_messageType) :
+		GameDataLoadedEvent(SFSE::MessagingInterface::MessageType a_messageType) :
 			messageType(a_messageType)
 		{}
 
 		SFSE::MessagingInterface::MessageType messageType;
+	};
+
+	class SaveLoadEvent : public TimedEventBase
+	{
+	public:
+		enum class SaveLoadType
+		{
+			kSaveLoad,
+			kSaveLoad_ListenersFinished,
+			kPostSaveLoad,
+			kPostSaveLoad_ListenersFinished
+		};
+
+		SaveLoadEvent(SaveLoadType a_saveLoadType) :
+			saveLoadType(a_saveLoadType)
+		{}
+
+		SaveLoadType saveLoadType;
 	};
 
 	class ArmorOrApparelEquippedEventDispatcher :
@@ -325,7 +343,7 @@ namespace events
 	};
 
 	class GameDataLoadedEventDispatcher :
-		public EventDispatcher<GameLoadedEvent>
+		public EventDispatcher<GameDataLoadedEvent>
 	{
 	public:
 		static GameDataLoadedEventDispatcher* GetSingleton()
@@ -347,9 +365,53 @@ namespace events
 	
 	};
 
+	class SaveLoadEventDispatcher :
+		public RE::BSTEventSink<RE::SaveLoadEvent>,
+		public EventDispatcher<SaveLoadEvent>
+	{
+	public:
+		using EventResult = RE::BSEventNotifyControl;
+		using Event = RE::SaveLoadEvent;
+
+		static SaveLoadEventDispatcher* GetSingleton()
+		{
+			static SaveLoadEventDispatcher singleton;
+			return &singleton;
+		}
+
+		EventResult ProcessEvent(const Event& a_event, RE::BSTEventSource<Event>* a_eventSource) override
+		{
+			switch (_cur_type) {
+			case SaveLoadEvent::SaveLoadType::kSaveLoad:
+				this->Dispatch({ SaveLoadEvent::SaveLoadType::kSaveLoad });
+				_cur_type = SaveLoadEvent::SaveLoadType::kPostSaveLoad;
+				this->Dispatch({ SaveLoadEvent::SaveLoadType::kSaveLoad_ListenersFinished });
+				break;
+
+			case SaveLoadEvent::SaveLoadType::kPostSaveLoad:
+				this->Dispatch({ SaveLoadEvent::SaveLoadType::kPostSaveLoad });
+				_cur_type = SaveLoadEvent::SaveLoadType::kSaveLoad;
+				this->Dispatch({ SaveLoadEvent::SaveLoadType::kPostSaveLoad_ListenersFinished });
+				break;
+			}
+			return EventResult::kContinue;
+		}
+
+		void Register()
+		{
+			Event::GetEventSource()->RegisterSink(this);
+		}
+
+	private:
+		SaveLoadEventDispatcher() { this->Register(); }
+
+		SaveLoadEvent::SaveLoadType _cur_type{ SaveLoadEvent::SaveLoadType::kSaveLoad };
+	};
+
 	class ActorUpdatedEventDispatcher :
 		public RE::BSTEventSink<RE::TESObjectLoadedEvent>,
 		public hooks::ActorUpdateFuncHook::Listener,
+		public SaveLoadEventDispatcher ::Listener,
 		public EventDispatcher<ActorUpdateEvent>,
 		public EventDispatcher<ActorFirstUpdateEvent>
 	{
@@ -382,8 +444,12 @@ namespace events
 			return EventResult::kContinue;
 		}
 
-		void OnEvent(const event_type& a_vfunc_event, dispatcher_type* a_vfunc_dispatcher) override 
+		void OnEvent(const hooks::ActorUpdateFuncHook::Listener::event_type& a_vfunc_event, hooks::ActorUpdateFuncHook::Listener::dispatcher_type* a_vfunc_dispatcher) override 
 		{
+			if (m_blocked) {
+				return;
+			}
+
 			auto actor = a_vfunc_event.GetArg<0>();
 			if (!_get(actor)) {
 				_insert_or_allocate(actor, true);
@@ -392,10 +458,29 @@ namespace events
 			this->EventDispatcher<ActorUpdateEvent>::Dispatch({ actor, a_vfunc_event.GetArg<1>() });
 		}
 
+		void OnEvent(const SaveLoadEvent& a_event, EventDispatcher<SaveLoadEvent>* a_dispatcher) override
+		{
+			switch (a_event.saveLoadType) {
+			case SaveLoadEvent::SaveLoadType::kSaveLoad:
+				m_blocked = true;
+				break;
+			case SaveLoadEvent::SaveLoadType::kSaveLoad_ListenersFinished:
+				m_blocked = false;
+				break;
+			case SaveLoadEvent::SaveLoadType::kPostSaveLoad:
+				m_blocked = true;
+				break;
+			case SaveLoadEvent::SaveLoadType::kPostSaveLoad_ListenersFinished:
+				m_blocked = false;
+				break;
+			}
+		}
+
 		void Register()
 		{
 			Event::GetEventSource()->RegisterSink(this);
 			hooks::ActorUpdateFuncHook::GetSingleton()->AddStaticListener(this);
+			SaveLoadEventDispatcher::GetSingleton()->AddStaticListener(this);
 		}
 
 		size_t NumWatching()
@@ -404,6 +489,8 @@ namespace events
 		}
 
 	protected:
+		std::atomic<bool> m_blocked{ false };
+
 		ActorUpdatedEventDispatcher() { this->Register(); }
 
 		void WatchInstance(RE::Actor* a_actor)

@@ -25,7 +25,7 @@ namespace daf
 		public events::EventDispatcher<events::ActorEquipManagerEquipEvent>::Listener,
 		public events::EventDispatcher<events::ActorUpdateEvent>::Listener,
 		public events::EventDispatcher<events::ActorFirstUpdateEvent>::Listener,
-		public RE::BSTEventSink<RE::SaveLoadEvent>
+		public events::SaveLoadEventDispatcher::Listener
 	{
 		friend class utils::SingletonBase<ConditionalChargenMorphManager>;
 
@@ -40,7 +40,7 @@ namespace daf
 
 		void OnEvent(const events::ActorFirstUpdateEvent& a_event, events::EventDispatcher<events::ActorFirstUpdateEvent>* a_dispatcher) override;
 
-		RE::BSEventNotifyControl ProcessEvent(const RE::SaveLoadEvent& a_event, RE::BSTEventSource<RE::SaveLoadEvent>* a_storage) override;
+		void OnEvent(const events::SaveLoadEvent& a_event, events::EventDispatcher<events::SaveLoadEvent>* a_dispatcher) override;
 
 		void Watch(RE::Actor* a_actor, bool a_pendingUpdate = true)
 		{
@@ -69,8 +69,7 @@ namespace daf
 			events::ArmorOrApparelEquippedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorEquipManagerEquipEvent>::AddStaticListener(this);
 			events::ActorUpdatedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorUpdateEvent>::AddStaticListener(this);
 			events::ActorUpdatedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorFirstUpdateEvent>::AddStaticListener(this);
-
-			RE::SaveLoadEvent::GetEventSource()->RegisterSink(this);
+			events::SaveLoadEventDispatcher::GetSingleton()->AddStaticListener(this);
 		}
 
 		bool ReevaluateActorMorph(RE::Actor* a_actor);

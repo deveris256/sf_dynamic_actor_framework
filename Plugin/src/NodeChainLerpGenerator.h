@@ -95,6 +95,8 @@ namespace daf
 			node(nullptr) {}
 		explicit Node(RE::NiAVObject* node) :
 			node(node), naturalParent(node->parent), originalLocalTransform(node->local) {}
+		Node(RE::NiAVObject* node, const RE::NiTransform& originalLocalTransform):
+			node(node), naturalParent(node->parent), originalLocalTransform(originalLocalTransform) {}
 
 		void bind(RE::NiAVObject* node)
 		{
@@ -114,7 +116,7 @@ namespace daf
 		std::vector<Node> chainNodes;
 
 		virtual ~NodeChainBase() = default;
-		virtual void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes) = 0;
+		virtual void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) = 0;
 		virtual void update(time_t lastTime, time_t currentTime) = 0;
 		virtual void setOverlayTransform(const std::vector<RE::NiTransform>& transform_overlay) = 0;
 	};
@@ -122,12 +124,12 @@ namespace daf
 	class DirectNodeChain : public NodeChainBase
 	{
 	public:
-		void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes) override
+		void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) override
 		{
 			chainRoot.bind(const_cast<RE::NiAVObject*>(a_chainRoot));
 			chainNodes.reserve(a_chainNodes.size());
-			for (auto node : a_chainNodes) {
-				chainNodes.emplace_back(node);
+			for (size_t i = 0; i < a_chainNodes.size(); ++i) {
+				chainNodes.emplace_back(a_chainNodes[i], a_originalLocalTransforms[i]);
 			}
 		}
 
@@ -175,7 +177,7 @@ namespace daf
 			physics_angularDamping(a_physics_angularDamping),
 			physics_linearDrag(a_physics_linearDrag) {}
 
-		void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes) override;
+		void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) override;
 
 		void update(time_t lastTime, time_t currentTime) override;
 
@@ -344,10 +346,10 @@ namespace daf
 		NodeChainLerpGenerator() :
 			lastLocalTime(0), etaLocal(0), lastSystemTime(0), fadeNode(nullptr) {}
 
-		NodeChainLerpGenerator(RE::BGSFadeNode* a_fadeNode, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData a_physicsData = PhysicsData()) :
-			fadeNode(a_fadeNode), lastLocalTime(0), etaLocal(0), lastSystemTime(0)
+		NodeChainLerpGenerator(RE::Actor* a_actor, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData a_physicsData = PhysicsData()) :
+			lastLocalTime(0), etaLocal(0), lastSystemTime(0)
 		{
-			build(a_fadeNode, a_chainRootName, a_chainNodeData, a_physicsData);
+			build(a_actor, a_chainRootName, a_chainNodeData, a_physicsData);
 		}
 
 		RE::BGSFadeNode*               fadeNode;
@@ -385,7 +387,7 @@ namespace daf
 			chain.release();
 		}
 
-		bool build(RE::BGSFadeNode* a_actor3DRoot, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData& a_physicsData, bool a_noPhysics = false);
+		bool build(RE::Actor* a_actor, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData& a_physicsData, bool a_noPhysics = false);
 
 		// Update the node chain with system time. Limited with delta_time_clamp to avoid large delta time. 0 means no limit.
 		void updateWithSystemTime(time_t systemTime, time_t delta_time_clamp = 0);

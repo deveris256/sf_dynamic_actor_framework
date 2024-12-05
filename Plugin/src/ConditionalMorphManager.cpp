@@ -110,13 +110,17 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorFirstUpdate
 	}
 }
 
-RE::BSEventNotifyControl daf::ConditionalChargenMorphManager::ProcessEvent(const RE::SaveLoadEvent& a_event, RE::BSTEventSource<RE::SaveLoadEvent>* a_storage)
+void daf::ConditionalChargenMorphManager::OnEvent(const events::SaveLoadEvent& a_event, events::EventDispatcher<events::SaveLoadEvent>* a_dispatcher)
 {
+	if (a_event.saveLoadType != events::SaveLoadEvent::SaveLoadType::kSaveLoad) {
+		return;
+	}
+
 	logger::info("Save loaded.");
 
 	daf::MorphRuleSetManager::GetSingleton().LoadRulesets(utils::GetPluginFolder() + "\\Rulesets");
 
-	return RE::BSEventNotifyControl::kContinue;
+	return;
 }
 
 bool daf::ConditionalChargenMorphManager::ReevaluateActorMorph(RE::Actor* a_actor)

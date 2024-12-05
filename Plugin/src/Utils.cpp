@@ -165,3 +165,23 @@ std::uint32_t utils::GetARMOModelOccupiedSlots(RE::TESObjectARMO* a_armo)
 	}
 	return slots;
 }
+
+RE::BGSFadeNode* utils::GetModel(const char* a_modelName)
+{
+	auto entry = RE::ModelDB::GetEntry(a_modelName);
+	if (!entry || !entry->node)
+		return nullptr;
+
+	return entry->node;
+}
+
+RE::BGSFadeNode* utils::GetActorBaseSkeleton(RE::Actor* a_actor)
+{
+	auto race = a_actor->race;
+	if (!race)
+		return nullptr;
+
+	auto sex = a_actor->GetNPC()->GetSex();
+
+	return GetModel(race->unk5E8[sex].model.c_str());
+}

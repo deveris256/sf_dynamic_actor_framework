@@ -1,11 +1,19 @@
 #include "NodeChainLerpGenerator.h"
 
-bool daf::NodeChainLerpGenerator::build(RE::BGSFadeNode* a_actor3DRoot, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData& a_physicsData, bool a_noPhysics)
+bool daf::NodeChainLerpGenerator::build(RE::Actor* a_actor, const std::string& a_chainRootName, const std::vector<ChainNodeData>& a_chainNodeData, const PhysicsData& a_physicsData, bool a_noPhysics)
 {
+	auto loadedData = a_actor->loadedData.lock_read();
+	auto a_actor3DRoot = reinterpret_cast<RE::BGSFadeNode*>(loadedData->data3D.get());
+	if (!a_actor3DRoot) {
+		logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: Actor has no loaded data. Actor {}", utils::make_str(a_actor));
+		return false;
+	}
+
 	std::lock_guard _lock(_this_lock);
 
-	if (!a_actor3DRoot) {
-		logger::error("Invalid actor 3D root");
+	auto base_skeleton = utils::GetActorBaseSkeleton(a_actor);
+	if (!base_skeleton) {
+		logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: Failed to get base skeleton for actor {}", utils::make_str(a_actor));
 		return false;
 	}
 
@@ -27,11 +35,17 @@ bool daf::NodeChainLerpGenerator::build(RE::BGSFadeNode* a_actor3DRoot, const st
 	freezeTargets.reserve(numNodes);
 
 	std::vector<RE::NiAVObject*> chainNodes;
+	std::vector<RE::NiTransform> originalLocalTransforms;
+	chainNodes.reserve(numNodes);
+	originalLocalTransforms.reserve(numNodes);
+
 	for (size_t i = 0; i < a_chainNodeData.size(); ++i) {
 		const auto& data = a_chainNodeData[i];
 
 		RE::NiNode* n = a_actor3DRoot->GetObjectByName(data.nodeName);
-		if (!n) {
+		RE::NiNode* base_n = base_skeleton->GetObjectByName(data.nodeName);
+
+		if (!n || !base_n) {
 			logger::error("Failed to find chain node {}", data.nodeName);
 			return false;
 		}
@@ -48,7 +62,9 @@ bool daf::NodeChainLerpGenerator::build(RE::BGSFadeNode* a_actor3DRoot, const st
 			}
 		}
 
-		chainNodes.push_back(n);
+		chainNodes.emplace_back(n);
+		originalLocalTransforms.emplace_back(base_n->local);
+
 		maxima.emplace_back(data.maxima);
 		minima.emplace_back(data.minima);
 		curTransforms.emplace_back(data.minima);
@@ -70,7 +86,7 @@ bool daf::NodeChainLerpGenerator::build(RE::BGSFadeNode* a_actor3DRoot, const st
 		chain = std::make_unique<DirectNodeChain>();
 	}
 
-	chain->build(chainRoot, chainNodes);
+	chain->build(chainRoot, chainNodes, originalLocalTransforms);
 	setNodeChainOverlayTransform(curTargets);
 	this->isActive = true;
 
@@ -179,9 +195,9 @@ bool daf::NodeChainLerpGenerator::parsePhysicsData(const PhysicsData& data, doub
 	return parsed;
 }
 
-void daf::PhysicsNodeChain::build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes)
+void daf::PhysicsNodeChain::build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms)
 {
-	DirectNodeChain::build(a_chainRoot, a_chainNodes);
+	DirectNodeChain::build(a_chainRoot, a_chainNodes, a_originalLocalTransforms);
 
 	// Build the physics chain
 	Eigen::Matrix4d root_transform;

@@ -65,7 +65,8 @@ namespace daf
 		public events::EventDispatcher<events::ActorEquipManagerEquipEvent>::Listener,
 		public events::EventDispatcher<events::ActorUpdateEvent>::Listener,
 		public events::EventDispatcher<events::ActorFirstUpdateEvent>::Listener,
-		public RE::BSTEventSink<RE::SaveLoadEvent>,
+		public events::EventDispatcher<events::GameDataLoadedEvent>::Listener,
+		public events::SaveLoadEventDispatcher::Listener,
 		public events::EventDispatcher<events::ActorGenitalChangedEvent>,
 		public events::EventDispatcher<events::ActorRevealingStateChangedEvent>,
 		public events::EventDispatcher<events::GenitalDataLoadingEvent>,
@@ -207,16 +208,19 @@ namespace daf
 
 		void OnEvent(const events::ActorFirstUpdateEvent& a_event, events::EventDispatcher<events::ActorFirstUpdateEvent>* a_dispatcher) override;
 
-		RE::BSEventNotifyControl ProcessEvent(const RE::SaveLoadEvent& a_event, RE::BSTEventSource<RE::SaveLoadEvent>* a_storage) override;
+		void OnEvent(const events::GameDataLoadedEvent& a_event, events::EventDispatcher<events::GameDataLoadedEvent>* a_dispatcher) override {
+			logger::info("GameDataLoadedEvent, message_type {}", std::to_underlying(a_event.messageType));
+		}
+
+		void OnEvent(const events::SaveLoadEvent& a_event, events::EventDispatcher<events::SaveLoadEvent>* a_dispatcher) override;
 
 		void Register()
 		{
 			events::ArmorOrApparelEquippedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorEquipManagerEquipEvent>::AddStaticListener(this);
-			//events::GameDataLoadedEventDispatcher::GetSingleton()->AddStaticListener(this);
+			events::GameDataLoadedEventDispatcher::GetSingleton()->AddStaticListener(this);
 			events::ActorUpdatedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorUpdateEvent>::AddStaticListener(this);
 			events::ActorUpdatedEventDispatcher::GetSingleton()->EventDispatcher<events::ActorFirstUpdateEvent>::AddStaticListener(this);
-
-			RE::SaveLoadEvent::GetEventSource()->RegisterSink(this);
+			events::SaveLoadEventDispatcher::GetSingleton()->AddStaticListener(this);
 		}
 
 		std::vector<std::string> QueryAvailibleGenitalTypesForActor(RE::Actor* a_actor);
@@ -300,6 +304,12 @@ namespace daf
 		std::shared_mutex m_genitalRevealKeyword_ReadWriteLock;
 
 		RE::Actor* m_playerRef{ nullptr };
+
+		void CacheGenitalHeadpart(RE::Actor* actor, RE::BGSHeadPart* a_headpart) {
+			tbb::concurrent_hash_map<RE::TESFormID, RE::BGSHeadPart*>::accessor accessor;
+			m_actor_genital_cache.insert(accessor, actor->formID);
+			accessor->second = a_headpart;
+		}
 
 		RE::BGSHeadPart* GetGenitalHeadpart_Impl(RE::TESRace* a_race, const std::string& a_genital_name, RE::SEX a_sex, size_t a_skintone_index) const;
 

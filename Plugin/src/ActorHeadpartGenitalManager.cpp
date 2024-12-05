@@ -81,14 +81,14 @@ void daf::ActorHeadpartGenitalManager::OnEvent(const events::ActorFirstUpdateEve
 	}
 
 	if (ActorHasGenitalOverride(actor_npc)) {
-		m_actor_genital_cache.insert({ actor->formID, GetActorGenital_Impl(actor_npc) });
+		CacheGenitalHeadpart(actor, GetActorGenital_Impl(actor_npc));
 		return;
 	}
 
 	// Attempt to set default genital headpart
 	auto genital_headpart = GetDefaultGenitalHeadpart(actor_npc);
 	if (!genital_headpart) {
-		m_actor_genital_cache.insert({ actor->formID, nullptr });
+		CacheGenitalHeadpart(actor, nullptr);
 		return;
 	}
 
@@ -107,8 +107,12 @@ void daf::ActorHeadpartGenitalManager::OnEvent(const events::ActorFirstUpdateEve
 	}
 }
 
-RE::BSEventNotifyControl daf::ActorHeadpartGenitalManager::ProcessEvent(const RE::SaveLoadEvent& a_event, RE::BSTEventSource<RE::SaveLoadEvent>* a_storage)
+void daf::ActorHeadpartGenitalManager::OnEvent(const events::SaveLoadEvent& a_event, events::EventDispatcher<events::SaveLoadEvent>* a_dispatcher)
 {
+	if (a_event.saveLoadType != events::SaveLoadEvent::SaveLoadType::kSaveLoad) {
+		return;
+	}
+
 	logger::info("Loading genital headparts...");
 
 	auto configFolder = utils::GetAddonsFolder() + "\\DAFGen";
@@ -123,7 +127,7 @@ RE::BSEventNotifyControl daf::ActorHeadpartGenitalManager::ProcessEvent(const RE
 		logger::error("Player reference not found, genital system will not work properly.");
 	}
 
-	return RE::BSEventNotifyControl::kContinue;
+	return;
 };
 
 std::vector<std::string> daf::ActorHeadpartGenitalManager::QueryAvailibleGenitalTypesForActor(RE::Actor* a_actor)
@@ -418,7 +422,7 @@ RE::BGSHeadPart* daf::ActorHeadpartGenitalManager::GetActorGenital(RE::Actor* a_
 	}
 
 	auto actor_genital = GetActorGenital_Impl(a_actor->GetNPC());
-	m_actor_genital_cache.insert({ a_actor->formID, actor_genital });
+	CacheGenitalHeadpart(a_actor, actor_genital);
 	return actor_genital;
 }
 
@@ -437,7 +441,7 @@ bool daf::ActorHeadpartGenitalManager::ChangeActorGenital(RE::Actor* a_actor, RE
 		auto& headparts = *acc;
 		bool  has_this_genital = false;
 
-		for (auto it = headparts.begin(); it != headparts.end(); ++it) {
+		for (auto it = headparts.begin(); it != headparts.end() && *it != nullptr; ++it) {
 			auto headpart = *it;
 			if (IsRegisteredGenitalHeadpart(headpart)) {
 				if (headpart == a_genital_headpart) {
@@ -455,7 +459,7 @@ bool daf::ActorHeadpartGenitalManager::ChangeActorGenital(RE::Actor* a_actor, RE
 		}
 	}
 
-	m_actor_genital_cache.insert({ a_actor->formID, a_genital_headpart });
+	CacheGenitalHeadpart(a_actor, a_genital_headpart);
 
 	if (headpart_changed) {
 		this->events::EventDispatcher<events::ActorGenitalChangedEvent>::Dispatch(a_actor, prev_genital_headpart, a_genital_headpart);
@@ -743,6 +747,8 @@ RE::BGSHeadPart* daf::ActorHeadpartGenitalManager::GetActorGenital_Impl(RE::TESN
 			return headpart;
 		}
 	}
+
+	return nullptr;
 }
 
 size_t daf::ActorHeadpartGenitalManager::ParseJsonFile(const std::string& a_filePath)
