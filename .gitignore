@@ -1,6 +1,9 @@
 [Bb]uild/
 .vs/
+.pdb
 .vscode/
 *.zip
 *.timestamp
 deploy-*.ps1
+/Plugin/dist/Data/SFSE/Plugins/sf_dynamic_actor_framework.pdb
+/Plugin/dist/sf_dynamic_actor_framework.pdb
