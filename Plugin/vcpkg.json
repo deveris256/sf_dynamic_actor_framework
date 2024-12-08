@@ -12,6 +12,7 @@
     "xbyak",
     "spdlog",
     "detours",
-    "tbb"
+    "tbb",
+    "eigen3"
   ]
 }

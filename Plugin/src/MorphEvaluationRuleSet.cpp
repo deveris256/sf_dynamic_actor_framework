@@ -383,9 +383,8 @@ float daf::MorphEvaluationRuleSet::AcquireHeadPartValue(RE::Actor* actor, RE::TE
 	auto  acc = npc->headParts.lock();
 	auto& headparts = *acc;
 
-	for (auto it = headparts.begin(); it != headparts.end(); ++it) {
-		auto headpart = *it;
-		if (headpart == headpart) {
+	for (auto it = headparts.begin(); it != headparts.end() && *it != nullptr; ++it) {
+		if (*it == headpart) {
 			return 1.f;
 		}
 	}

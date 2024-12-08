@@ -43,6 +43,7 @@ find_library(DETOURS_LIBRARY detours REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(TBB CONFIG REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
+find_package(Eigen3 CONFIG REQUIRED)
 find_dependency_path(CommonLibSF include/SFSE/SFSE.h)
 
 # cmake target
@@ -74,6 +75,7 @@ target_link_libraries(
 		spdlog::spdlog
 		yaml-cpp::yaml-cpp
 		TBB::tbb
+		Eigen3::Eigen
 )
 
 # compiler def

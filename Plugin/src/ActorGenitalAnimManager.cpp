@@ -30,9 +30,9 @@ void daf::ActorGenitalAnimManager::OnEvent(const events::ActorFirstUpdateEvent& 
 	auto actor = a_event.actor;
 	auto npc = actor->GetNPC();
 
-	if (actor->IsPlayerRef()) {
-		actor->SetActorValue(*m_arousalActorValue, 100.0);
-	}
+	//if (actor->IsPlayerRef()) {
+	//	actor->SetActorValue(*m_arousalActorValue, 100.0);
+	//}
 
 	_Pending_Actor_List_T::accessor accessor;
 	if (m_actorsPendingAttachGenerator.find(accessor, actor->formID)) {

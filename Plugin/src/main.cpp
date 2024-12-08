@@ -23,6 +23,8 @@ void MessageCallback(SFSE::MessagingInterface::Message* a_msg) noexcept
 		{
 			logger::info("Initializing core components.", utils::GetPluginName());
 			
+			daf::ActorAppearanceUpdator::GetSingleton().Register();
+
 			daf::ActorHeadpartGenitalManager::GetSingleton().Register();
 
 			daf::ConditionalChargenMorphManager::GetSingleton().Register();

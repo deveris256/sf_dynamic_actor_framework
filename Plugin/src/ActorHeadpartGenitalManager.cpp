@@ -43,8 +43,7 @@ void daf::ActorHeadpartGenitalManager::OnEvent(const events::ActorUpdateEvent& a
 		should_update |= EvaluateRevealingStateAndApply(actor);
 
 		if (should_update) {
-			actor->UpdateAppearance(false, 0u, false);
-			actor->UpdateChargenAppearance();
+			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphAndHeadparts);
 		}
 
 		m_actor_pending_change_genital.erase(accessor);
@@ -62,7 +61,7 @@ void daf::ActorHeadpartGenitalManager::OnEvent(const events::ActorUpdateEvent& a
 		bool should_update = EvaluateRevealingStateAndApply(actor);
 
 		if (should_update) {
-			actor->UpdateChargenAppearance();
+			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
 		}
 
 		m_actor_pending_update.erase(accessor);
@@ -100,10 +99,9 @@ void daf::ActorHeadpartGenitalManager::OnEvent(const events::ActorFirstUpdateEve
 	}
 
 	if (should_update_headpart) {
-		actor->UpdateAppearance(false, 0u, false);
-		actor->UpdateChargenAppearance();
+		UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphAndHeadparts);
 	} else if (should_update_morphs) {
-		actor->UpdateChargenAppearance();
+		UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
 	}
 }
 

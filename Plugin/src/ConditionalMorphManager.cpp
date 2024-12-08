@@ -52,7 +52,7 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorUpdateEvent
 			m_menu_actor_last_update_time = a_event.when();
 			if (this->ReevaluateActorMorph(actor)) {
 				logger::info("MenuActor {} updating morphs", utils::make_str(actor));
-				actor->UpdateChargenAppearance();  // Actors seems to partially copy morphs from MenuActors, this is bad
+				UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);  // Actors seems to partially copy morphs from MenuActors, this is bad
 			}
 			return;
 		}
@@ -74,7 +74,7 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorUpdateEvent
 			if (this->ReevaluateActorMorph(actor)) {
 			}
 			logger::info("Actor {} updating morphs", utils::make_str(actor));
-			actor->UpdateChargenAppearance();
+			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
 			m_actors_pending_reevaluation.unsafe_erase(actor);
 			return;
 		}
@@ -84,7 +84,7 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorUpdateEvent
 			acc->second = a_event.when();
 			if (this->ReevaluateActorMorph(actor)) {
 				logger::info("Actor {} updating morphs regular", utils::make_str(actor));
-				actor->UpdateChargenAppearance();
+				UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
 			}
 			return;
 		}
@@ -105,7 +105,7 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorFirstUpdate
 		acc->second = a_event.when();
 		if (this->ReevaluateActorMorph(actor)) {
 			logger::info("Actor {} updating morphs first", utils::make_str(actor));
-			actor->UpdateChargenAppearance();
+			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
 		}
 	}
 }

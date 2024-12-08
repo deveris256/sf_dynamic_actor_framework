@@ -247,7 +247,7 @@ namespace utils
 
 		scope_guard_init_release(const scope_guard_init_release&) = delete;
 
-		scope_guard_init_release(scope_guard_init_release&& other)
+		scope_guard_init_release(scope_guard_init_release&& other) noexcept
 		{
 			_initFunc = std::move(other._initFunc);
 			_releaseFunc = std::move(other._releaseFunc);

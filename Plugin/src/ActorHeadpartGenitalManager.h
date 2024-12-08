@@ -2,6 +2,8 @@
 #include "SFEventHandler.h"
 #include "SingletonBase.h"
 
+#include "ActorAppearanceUpdator.h"
+
 #include "MutexUtils.h"
 
 namespace events

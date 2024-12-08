@@ -463,12 +463,14 @@ namespace events
 			switch (a_event.saveLoadType) {
 			case SaveLoadEvent::SaveLoadType::kSaveLoad:
 				m_blocked = true;
+				m_actor_updated.clear();
 				break;
 			case SaveLoadEvent::SaveLoadType::kSaveLoad_ListenersFinished:
 				m_blocked = false;
 				break;
 			case SaveLoadEvent::SaveLoadType::kPostSaveLoad:
 				m_blocked = true;
+				m_actor_updated.clear();
 				break;
 			case SaveLoadEvent::SaveLoadType::kPostSaveLoad_ListenersFinished:
 				m_blocked = false;

@@ -98,11 +98,11 @@ namespace daf
 		Node(RE::NiAVObject* node, const RE::NiTransform& originalLocalTransform):
 			node(node), naturalParent(node->parent), originalLocalTransform(originalLocalTransform) {}
 
-		void bind(RE::NiAVObject* node)
+		void bind(RE::NiAVObject* node, const RE::NiTransform& originalLocalTransform)
 		{
 			this->node = node;
 			naturalParent = node->parent;
-			originalLocalTransform = node->local;
+			this->originalLocalTransform = originalLocalTransform;
 			transformOverlay = RE::NiTransform();
 
 			//auto assert = (node->parent->world * node->local) / node->world;
@@ -116,7 +116,7 @@ namespace daf
 		std::vector<Node> chainNodes;
 
 		virtual ~NodeChainBase() = default;
-		virtual void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) = 0;
+		virtual void build(const RE::NiAVObject* a_chainRoot, const RE::NiTransform& a_chainRootOriginalLocalTransform, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) = 0;
 		virtual void update(time_t lastTime, time_t currentTime) = 0;
 		virtual void setOverlayTransform(const std::vector<RE::NiTransform>& transform_overlay) = 0;
 	};
@@ -124,9 +124,9 @@ namespace daf
 	class DirectNodeChain : public NodeChainBase
 	{
 	public:
-		void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) override
+		void build(const RE::NiAVObject* a_chainRoot, const RE::NiTransform& a_chainRootOriginalLocalTransform, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) override
 		{
-			chainRoot.bind(const_cast<RE::NiAVObject*>(a_chainRoot));
+			chainRoot.bind(const_cast<RE::NiAVObject*>(a_chainRoot), a_chainRootOriginalLocalTransform);
 			chainNodes.reserve(a_chainNodes.size());
 			for (size_t i = 0; i < a_chainNodes.size(); ++i) {
 				chainNodes.emplace_back(a_chainNodes[i], a_originalLocalTransforms[i]);
@@ -177,7 +177,7 @@ namespace daf
 			physics_angularDamping(a_physics_angularDamping),
 			physics_linearDrag(a_physics_linearDrag) {}
 
-		void build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) override;
+		void build(const RE::NiAVObject* a_chainRoot, const RE::NiTransform& a_chainRootOriginalLocalTransform, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms) override;
 
 		void update(time_t lastTime, time_t currentTime) override;
 

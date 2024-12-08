@@ -22,7 +22,8 @@ bool daf::NodeChainLerpGenerator::build(RE::Actor* a_actor, const std::string& a
 	fadeNode = a_actor3DRoot;
 
 	RE::NiNode* chainRoot = a_actor3DRoot->GetObjectByName(a_chainRootName);
-	if (!chainRoot) {
+	RE::NiNode* base_chainRoot = base_skeleton->GetObjectByName(a_chainRootName);
+	if (!chainRoot || !base_chainRoot) {
 		logger::error("Failed to find chain root node {}", a_chainRootName);
 		return false;
 	}
@@ -86,7 +87,7 @@ bool daf::NodeChainLerpGenerator::build(RE::Actor* a_actor, const std::string& a
 		chain = std::make_unique<DirectNodeChain>();
 	}
 
-	chain->build(chainRoot, chainNodes, originalLocalTransforms);
+	chain->build(chainRoot, base_chainRoot->local, chainNodes, originalLocalTransforms);
 	setNodeChainOverlayTransform(curTargets);
 	this->isActive = true;
 
@@ -154,6 +155,8 @@ bool daf::NodeChainLerpGenerator::parsePhysicsData(const PhysicsData& data, doub
 
 	physicsParams.mass.Set(data.mass);
 
+	mass_init_eval = physicsParams.mass.Evaluate();
+
 	bool parsed = true;
 
 	physicsParams.stiffness.Set(data.stiffness);
@@ -166,7 +169,7 @@ bool daf::NodeChainLerpGenerator::parsePhysicsData(const PhysicsData& data, doub
 			parsed = false;
 		}
 	}
-	mass_init_eval = physicsParams.mass.Evaluate();
+	stiffness_init_eval = physicsParams.stiffness.Evaluate();
 
 	physicsParams.angularDamping.Set(data.angularDamping);
 	if (!data.angularDampingExpression.empty()) {
@@ -195,9 +198,9 @@ bool daf::NodeChainLerpGenerator::parsePhysicsData(const PhysicsData& data, doub
 	return parsed;
 }
 
-void daf::PhysicsNodeChain::build(const RE::NiAVObject* a_chainRoot, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms)
+void daf::PhysicsNodeChain::build(const RE::NiAVObject* a_chainRoot, const RE::NiTransform& a_chainRootOriginalLocalTransform, const std::vector<RE::NiAVObject*>& a_chainNodes, const std::vector<RE::NiTransform>& a_originalLocalTransforms)
 {
-	DirectNodeChain::build(a_chainRoot, a_chainNodes, a_originalLocalTransforms);
+	DirectNodeChain::build(a_chainRoot, a_chainRootOriginalLocalTransform, a_chainNodes, a_originalLocalTransforms);
 
 	// Build the physics chain
 	Eigen::Matrix4d root_transform;
@@ -219,7 +222,7 @@ void daf::PhysicsNodeChain::build(const RE::NiAVObject* a_chainRoot, const std::
 	chain.build(root_transform, joint_transforms, physics_mass, physics_stiffness, physics_angularDamping, physics_linearDrag, physics_gravity);
 }
 
-void daf::PhysicsNodeChain::update(time_t lastTime, time_t currentTime)
+void daf::PhysicsNodeChain::update(time_t lastTime, time_t currentTime) // Breaks under release mode
 {
 	if (!physics_enabled) {
 		DirectNodeChain::update(lastTime, currentTime);

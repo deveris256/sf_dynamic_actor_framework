@@ -4,6 +4,8 @@
 #include "MorphEvaluationRuleSet.h"
 #include "SingletonBase.h"
 
+#include "ActorAppearanceUpdator.h"
+
 #include "MutexUtils.h"
 
 namespace daf
