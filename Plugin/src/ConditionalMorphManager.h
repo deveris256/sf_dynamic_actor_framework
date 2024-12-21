@@ -11,7 +11,7 @@
 namespace daf
 {
 	inline constexpr time_t MenuActorUpdateInterval_ms = 200;
-	inline constexpr time_t ActorUpdateInterval_ms = 300;
+	inline constexpr time_t ActorUpdateInterval_ms = 400;
 	inline constexpr time_t ActorPendingUpdateDelay_ms = 0;
 	inline constexpr float  DiffThreshold = 0.05f;
 

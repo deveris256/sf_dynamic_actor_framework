@@ -46,54 +46,50 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorUpdateEvent
 {
 	//logger::c_info("Actor {} updated with deltaTime: {} ms, timeStamp {}", utils::make_str(a_event.actor), a_event.deltaTime * 1000, a_event.when());
 	auto actor = a_event.actor;
-	{
-		std::lock_guard lock(m_menu_actor_last_update_time_lock);
-		if (utils::IsActorMenuActor(a_event.actor) && a_event.when() - m_menu_actor_last_update_time > MenuActorUpdateInterval_ms) {
-			m_menu_actor_last_update_time = a_event.when();
-			if (this->ReevaluateActorMorph(actor)) {
-				logger::info("MenuActor {} updating morphs", utils::make_str(actor));
-				UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);  // Actors seems to partially copy morphs from MenuActors, this is bad
-			}
-			return;
-		}
+	//{
+	//	std::lock_guard lock(m_menu_actor_last_update_time_lock);
+	//	if (utils::IsActorMenuActor(a_event.actor) && a_event.when() - m_menu_actor_last_update_time > MenuActorUpdateInterval_ms) {
+	//		m_menu_actor_last_update_time = a_event.when();
+	//		if (this->ReevaluateActorMorph(actor)) {
+	//			logger::info("MenuActor {} updating morphs", utils::make_str(actor));
+	//			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);  // Actors seems to partially copy morphs from MenuActors, this is bad
+	//			m_actors_pending_reevaluation.insert(RE::PlayerCharacter::GetSingleton());
+	//		}
+	//		return;
+	//	}
+	//}
+
+	tbb::concurrent_hash_map<RE::TESFormID, time_t>::accessor acc;
+	if (!actor || !m_actor_watchlist.find(acc, actor->formID)) {
+		return;
 	}
 
-	{
-		tbb::concurrent_hash_map<RE::TESFormID, time_t>::accessor acc;
-		if (!actor || !m_actor_watchlist.find(acc, actor->formID)) {
-			return;
+	// Reevaluate immediately if the actor is pending reevaluation
+	if (m_actors_pending_reevaluation.contains(actor)) {
+		std::lock_guard lock(m_actors_pending_reevaluation_erase_lock);
+		acc->second = a_event.when();
+		if (this->ReevaluateActorMorph(actor)) {
 		}
+		logger::info("Actor {} updating morphs", utils::make_str(actor));
+		UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
+		m_actors_pending_reevaluation.unsafe_erase(actor);
+		return;
+	}
 
-		// Reevaluate immediately if the actor is pending reevaluation
-		if (m_actors_pending_reevaluation.contains(actor)) {
-			if (a_event.when() - acc->second < ActorPendingUpdateDelay_ms) {
-				return;
-			}
-			std::lock_guard lock(m_actors_pending_reevaluation_erase_lock);
-			acc->second = a_event.when();
-			if (this->ReevaluateActorMorph(actor)) {
-			}
-			logger::info("Actor {} updating morphs", utils::make_str(actor));
+	// Update if the actor has not been updated for a certain interval
+	if (a_event.when() - acc->second > ActorUpdateInterval_ms) {
+		acc->second = a_event.when();
+		if (this->ReevaluateActorMorph(actor)) {
+			logger::info("Actor {} updating morphs regular", utils::make_str(actor));
 			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
-			m_actors_pending_reevaluation.unsafe_erase(actor);
-			return;
 		}
-
-		// Update if the actor has not been updated for a certain interval
-		if (a_event.when() - acc->second > ActorUpdateInterval_ms) {
-			acc->second = a_event.when();
-			if (this->ReevaluateActorMorph(actor)) {
-				logger::info("Actor {} updating morphs regular", utils::make_str(actor));
-				UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
-			}
-			return;
-		}
+		return;
 	}
 }
 
 void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorFirstUpdateEvent& a_event, events::EventDispatcher<events::ActorFirstUpdateEvent>* a_dispatcher)
 {
-	logger::c_info("Actor {} first updated with deltaTime: {} ms, timeStamp {}", utils::make_str(a_event.actor), a_event.deltaTime * 1000, a_event.when());
+	//logger::c_info("Actor {} first updated with deltaTime: {} ms, timeStamp {}", utils::make_str(a_event.actor), a_event.deltaTime * 1000, a_event.when());
 
 	auto actor = a_event.actor;
 	{
@@ -105,7 +101,7 @@ void daf::ConditionalChargenMorphManager::OnEvent(const events::ActorFirstUpdate
 		acc->second = a_event.when();
 		if (this->ReevaluateActorMorph(actor)) {
 			logger::info("Actor {} updating morphs first", utils::make_str(actor));
-			UpdateActorAppearance(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
+			UpdateActorAppearanceImmediate(actor, ActorAppearanceUpdator::UpdateType::kBodyMorphOnly);
 		}
 	}
 }
@@ -151,5 +147,5 @@ bool daf::ConditionalChargenMorphManager::ReevaluateActorMorph(RE::Actor* a_acto
 		}
 	}
 
-	return session.PushCommits() > DiffThreshold;
+	return session.PushCommits(DiffThreshold) > DiffThreshold;
 }

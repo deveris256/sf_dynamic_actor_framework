@@ -63,7 +63,7 @@ namespace utils
 	{
 		auto npc = a_form->GetNPC();
 		if (npc) {
-			return std::format("NPC:'{}'({:X})", npc->GetFormEditorID(), npc->GetFormID());
+			return std::format("NPC:'{}'({:X}, npc: {:X})", npc->GetFormEditorID(), a_form->GetFormID(), npc->GetFormID());
 		} else {
 			return std::format("'{}'({:X})", a_form->GetDisplayFullName(), a_form->GetFormID());  // Could be potentially crashy
 		}

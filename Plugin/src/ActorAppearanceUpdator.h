@@ -5,7 +5,8 @@
 
 namespace daf
 {
-	inline constexpr time_t ActorUpdateAppearanceDelay_ms = 300;
+	inline constexpr time_t ActorUpdateAppearanceDelay_ms = 200;
+	inline constexpr bool DisableMenuActorMorphUpdate = true;
 
 	class ActorAppearanceUpdator :
 		public utils::SingletonBase<ActorAppearanceUpdator>,
@@ -27,6 +28,7 @@ namespace daf
 		{
 			UpdateType type{ UpdateType::kNone };
 			time_t     timestamp{ 0 };
+			bool       refreshTimestampOnFetch{ false };
 		};
 
 		using _Pending_List_T = tbb::concurrent_hash_map<RE::Actor*, PendingUpdateInfo>;
@@ -34,9 +36,15 @@ namespace daf
 		void OnEvent(const events::ActorUpdateEvent& a_event, events::EventDispatcher<events::ActorUpdateEvent>* a_dispatcher) override {
 			auto actor = a_event.actor;
 
-			_Pending_List_T::const_accessor acc;
+			_Pending_List_T::accessor acc;
 			if (!actor || !m_actor_pending_update_appearance.find(acc, actor)) {
 				return;
+			}
+
+			if (acc->second.refreshTimestampOnFetch) {
+				acc->second.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+				//logger::info("ActorAppearanceUpdator::OnEvent: Refreshed Timestamp: Actor[{}], UpdateType[{}]", utils::make_str(actor), std::to_underlying(acc->second.type));
+				acc->second.refreshTimestampOnFetch = false;
 			}
 
 			if (a_event.when() - acc->second.timestamp < ActorUpdateAppearanceDelay_ms) {
@@ -54,6 +62,8 @@ namespace daf
 				actor->UpdateChargenAppearance();
 			}
 
+			//logger::info("ActorAppearanceUpdator::OnEvent: Updated: Actor[{}], UpdateType[{}]", utils::make_str(actor), std::to_underlying(acc->second.type));
+
 			m_actor_pending_update_appearance.erase(acc);
 		}
 
@@ -63,11 +73,17 @@ namespace daf
 				return;
 			}
 
+			
+			if (DisableMenuActorMorphUpdate && utils::IsActorMenuActor(actor)) {
+				return;
+			}
+
 			_Pending_List_T::accessor acc;
 			m_actor_pending_update_appearance.insert(acc, actor);
 
 			// Invalidates update if the actor is equipping/unequipping items
-			acc->second.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+			//logger::info("ActorAppearanceUpdator::OnEvent: Actor[{}] set RefreshTimestamp: {}", utils::make_str(actor), std::to_underlying(acc->second.type), acc->second.refreshTimestampOnFetch);
+			acc->second.refreshTimestampOnFetch = true;
 		}
 
 		void OnEvent(const events::SaveLoadEvent& a_event, events::EventDispatcher<events::SaveLoadEvent>* a_dispatcher) override
@@ -79,10 +95,6 @@ namespace daf
 		}
 
 		bool UpdateActor(RE::Actor* a_actor, UpdateType a_type) {
-			if (!a_actor) {
-				return false;
-			}
-
 			_Pending_List_T::accessor acc;
 			if (!m_actor_pending_update_appearance.insert(acc, a_actor)) {
 				//return false;
@@ -90,6 +102,29 @@ namespace daf
 
 			acc->second.type = UpdateType(std::to_underlying(acc->second.type) | std::to_underlying(a_type));
 			acc->second.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+
+			//logger::info("ActorAppearanceUpdator::UpdateActor: Actor[{}], UpdateType[{}], RefreshTimestamp: {}", utils::make_str(a_actor), std::to_underlying(acc->second.type), acc->second.refreshTimestampOnFetch);
+
+			return true;
+		}
+
+		bool UpdateActorImmediate(RE::Actor* a_actor, UpdateType a_type) {
+			auto type = std::to_underlying(a_type);
+
+			_Pending_List_T::accessor acc;
+			if (m_actor_pending_update_appearance.find(acc, a_actor)) {
+				type |= std::to_underlying(acc->second.type);
+				m_actor_pending_update_appearance.erase(acc);
+			}
+
+			if (type & std::to_underlying(UpdateType::kHeadpartsOnly)) {
+				// Update headparts
+				a_actor->UpdateAppearance(false, 0u, false);
+			}
+			if (type & std::to_underlying(UpdateType::kBodyMorphOnly)) {
+				// Update body morph
+				a_actor->UpdateChargenAppearance();
+			}
 
 			return true;
 		}
@@ -106,8 +141,20 @@ namespace daf
 		ActorAppearanceUpdator() {};
 	};
 
-	// Use this interface to ensure that the actor's appearance is updated at the right time
-	inline bool UpdateActorAppearance(RE::Actor* a_actor, ActorAppearanceUpdator::UpdateType a_type) {
+	// Use this interface to ensure that the actor's appearance is updated at the right time. Thread-safe.
+	inline bool UpdateActorAppearance(RE::Actor* a_actor, ActorAppearanceUpdator::UpdateType a_type)
+	{
+		if (DisableMenuActorMorphUpdate && utils::IsActorMenuActor(a_actor)) {
+			return false;
+		}
 		return ActorAppearanceUpdator::GetSingleton().UpdateActor(a_actor, a_type);
+	}
+
+	inline bool UpdateActorAppearanceImmediate(RE::Actor* a_actor, ActorAppearanceUpdator::UpdateType a_type)
+	{
+		if (DisableMenuActorMorphUpdate && utils::IsActorMenuActor(a_actor)) {
+			return false;
+		}
+		return ActorAppearanceUpdator::GetSingleton().UpdateActorImmediate(a_actor, a_type);
 	}
 }

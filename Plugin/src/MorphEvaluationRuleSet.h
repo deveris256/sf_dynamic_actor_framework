@@ -137,8 +137,21 @@ namespace daf
 		
 		/*
 		* JSON format:
-		* {"Aliases": { symbol: { "EditorID": editorID, ["Type": actorValue|wornKeyword|visibleWornKeyword|npcKeyword|morph, "Default": default_value] }, ...},
-		*  "Rules": { "Adders": {morphName0: "expression0", ...}, "Setters": {morphName1: "expression1", ...}}
+		  {
+			"Aliases": { 
+				symbol: { "EditorID": editorID, ["Type": actorValue|wornKeyword|visibleWornKeyword|npcKeyword|morph, "Default": default_value] }, 
+				...
+			},
+			"Rules": { 
+				"Adders": {
+					morphName0: "expression0", 
+					...
+				}, 
+				"Setters": {
+					morphName1: "expression1", 
+					...
+				}
+			}
 		*/
 		bool ParseScript(std::string a_filename, bool a_clearExisting, CollisionBehavior a_behavior = CollisionBehavior::kOverwrite);
 

@@ -131,9 +131,13 @@ namespace daf
 		}
 
 		// Reduce resource occupation time and avoid race condition
-		float PushCommits()
+		float PushCommits(float a_minDiffToCommit = 0.f)
 		{
 			float diff = Diff();
+
+			if (diff < a_minDiffToCommit) {
+				return diff;
+			}
 
 			std::unordered_map<std::string_view, float> commit_batch;
 
