@@ -5,7 +5,7 @@ bool daf::NodeChainLerpGenerator::build(RE::Actor* a_actor, const std::string& a
 	auto loadedData = a_actor->loadedData.lock_read();
 	auto a_actor3DRoot = reinterpret_cast<RE::BGSFadeNode*>(loadedData->data3D.get());
 	if (!a_actor3DRoot) {
-		logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: Actor has no loaded data. Actor {}", utils::make_str(a_actor));
+		logger::warn("daf::NodeChainLerpGenerator: Actor has no loaded data. Actor {}", utils::make_str(a_actor));
 		return false;
 	}
 
@@ -13,7 +13,7 @@ bool daf::NodeChainLerpGenerator::build(RE::Actor* a_actor, const std::string& a
 
 	auto base_skeleton = utils::GetActorBaseSkeleton(a_actor);
 	if (!base_skeleton) {
-		logger::warn("ActorGenitalAnimManager::BuildNodeChainForActor: Failed to get base skeleton for actor {}", utils::make_str(a_actor));
+		logger::warn("daf::NodeChainLerpGenerator: Failed to get base skeleton for actor {}", utils::make_str(a_actor));
 		return false;
 	}
 

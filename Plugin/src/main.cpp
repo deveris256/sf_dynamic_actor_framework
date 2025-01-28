@@ -11,8 +11,6 @@
 // Modules
 #include "MorphEvaluationRuleSet.h"
 #include "ConditionalMorphManager.h"
-#include "ActorHeadpartGenitalManager.h"
-#include "ActorGenitalAnimManager.h"
 
 void MessageCallback(SFSE::MessagingInterface::Message* a_msg) noexcept
 {
@@ -25,11 +23,7 @@ void MessageCallback(SFSE::MessagingInterface::Message* a_msg) noexcept
 			
 			daf::ActorAppearanceUpdator::GetSingleton().Register();
 
-			daf::ActorHeadpartGenitalManager::GetSingleton().Register();
-
 			daf::ConditionalChargenMorphManager::GetSingleton().Register();
-
-			daf::ActorGenitalAnimManager::GetSingleton().Register();
 		}
 		break;
 	case SFSE::MessagingInterface::kPostLoad:
