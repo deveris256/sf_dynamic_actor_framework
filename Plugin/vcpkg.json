@@ -3,7 +3,6 @@
     "name": "sf-dynamic-actor-framework",
     "version-string": "1.0.0",
     "description": "Dynamic Actor Framework (DAF)",
-    "builtin-baseline": "14542c8ad9b6bcb9da755884ab823605c3300b68",
     "homepage": "https://github.com/deveris256/sf_dynamic_actor_framework",
     "dependencies": [
         "nlohmann-json",
