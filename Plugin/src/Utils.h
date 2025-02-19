@@ -1,6 +1,7 @@
 #pragma once
 #include "Exceptions.h"
 #include "ModelDB.h"
+#include <filesystem>
 
 namespace utils
 {
@@ -10,13 +11,17 @@ namespace utils
 		concept _is_form = std::derived_from<_FORM_T, RE::TESForm>;
 	}
 
+	std::vector<nlohmann::json> GetJsonFiles(std::string path);
+
 	std::string GetPluginFolder();
 
 	std::string GetAddonsFolder();
 
 	std::string GetAddonFilePath(std::string addonFileName);
 
-	YAML::Node GetAddonFile(std::string addonFileName);
+	nlohmann::json GetAddonFile(std::string addonFileName);
+
+	std::map<std::string, nlohmann::json> GetAddons();
 
 	inline constexpr std::string_view GetPluginName()
 	{

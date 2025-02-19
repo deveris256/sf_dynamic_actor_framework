@@ -16,41 +16,130 @@ std::string utils::GetPluginFolder()
 	return folder;
 }
 
+std::vector<nlohmann::json> utils::GetJsonFiles(std::string path)
+{
+	std::vector<nlohmann::json> dataVector;
+
+	int maxFiles = 512;
+	int counter = 0;
+
+	if (!std::filesystem::exists(path) || std::filesystem::is_directory(path))
+	{
+		return dataVector;
+	}
+
+	try {
+		for (const auto& entry : std::filesystem::directory_iterator(path))
+		{
+			counter += 1;
+			if (counter > maxFiles)
+			{
+				return dataVector;
+			}
+			if (entry.is_regular_file() && entry.path().extension() == ".json")
+			{
+				try {
+					nlohmann::json j;
+					std::ifstream file(entry.path().string());
+
+					j = nlohmann::json::parse(file);
+					dataVector.emplace_back(j);
+
+				} catch (nlohmann::json::parse_error& e){
+					logger::c_log<logger::LogLevel::kERROR>(e.what());
+					continue;
+				}
+			}
+		}
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::c_log<logger::LogLevel::kERROR>(e.what());
+		return dataVector;
+	}
+
+	return dataVector;
+}
+
 std::string utils::GetAddonsFolder() {
 	std::string addonsFolder = utils::GetPluginFolder() + "\\Addons";
 	
 	return addonsFolder;
 }
 
-std::string utils::GetAddonFilePath(std::string addonFileName) {
-	if (addonFileName == "") {
-		throw new InvalidAddonFileException;
+std::string utils::GetAddonFilePath(std::string addonName) {
+	std::string addonFileJson = utils::GetAddonsFolder() + "\\" + addonName + "\\" + "addon.json";
+
+	if (std::filesystem::exists(addonFileJson)) {
+		return addonFileJson;
 	}
 
-	std::string addonFileYml = utils::GetAddonsFolder() + addonFileName + ".yml";
-	std::string addonFileYaml = utils::GetAddonsFolder() + addonFileName + ".yaml";
-
-	if (std::filesystem::exists(addonFileYml)) {
-		return addonFileYml;
-	} else if (std::filesystem::exists(addonFileYaml)) {
-		return addonFileYaml;
-	}
-
-	throw new InvalidAddonFileException;
+	return "";
 }
 
-YAML::Node utils::GetAddonFile(std::string addonFileName) {
-	
+nlohmann::json utils::GetAddonFile(std::string addonFileName)
+{
+	nlohmann::json addonFile;
+
 	try {
 		std::string addonFilePath = utils::GetAddonFilePath(addonFileName);
-		
-		YAML::Node  addonFile = YAML::LoadFile(addonFilePath);
 
-		return addonFile;
+		if (addonFilePath == "") {
+			return nullptr;
+		}
+
+		addonFile = nlohmann::json::parse(addonFilePath);
+	} catch (nlohmann::json::parse_error) {
+		return nullptr;
 	}
-	catch (InvalidAddonFileException) {
-		throw new InvalidAddonFileException;
+	return addonFile;
+}
+
+std::map<std::string, nlohmann::json> utils::GetAddons()
+{
+	std::string                 path = utils::GetAddonsFolder();
+
+	logger::info(path.c_str());
+
+	std::map<std::string, nlohmann::json> addons;
+
+	int            maxFiles = 512;
+	int            counter = 0;
+
+	std::string addon_file_name("addon.json");
+
+	try {
+		for (const auto& entry : std::filesystem::directory_iterator(path))
+		{
+			counter += 1;
+
+			if (counter > maxFiles) {
+				return addons;
+			}
+
+			if (entry.is_directory()) {
+				std::filesystem::path addon_file = entry.path() / addon_file_name;
+
+				logger::info(addon_file.string().c_str());
+
+				if (std::filesystem::exists(addon_file)) {
+					std::ifstream file(addon_file);
+
+					try {
+						nlohmann::json j = nlohmann::json::parse(file);
+						addons.emplace(entry.path().string(), j);
+
+					} catch (nlohmann::json::parse_error& e) {
+						logger::c_log<logger::LogLevel::kERROR>(e.what());
+						continue;
+					}
+				}
+			}
+		}
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::c_log<logger::LogLevel::kERROR>(e.what());
+		return addons;
 	}
+
+	return addons;
 }
 
 std::string utils::GetPluginIniFile()

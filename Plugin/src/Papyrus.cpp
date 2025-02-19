@@ -3,6 +3,7 @@
 namespace DAFPapyrus
 {
 	// Scales
+	/*
 	int DAFPapyrus::ChangeScaleValue(std::monostate, RE::Actor* a_actor, std::string s_addon_id, std::string s_scale_id, int i_change_amount)
 	{
 		scales::Scale scale;
@@ -23,5 +24,5 @@ namespace DAFPapyrus
 		int sum = scale.ChangeValue(i_change_amount);
 
 		return sum;
-	}
+	}*/
 }
